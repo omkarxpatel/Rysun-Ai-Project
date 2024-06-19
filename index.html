@@ -4,54 +4,52 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rysun Ai Project - Omkar Patel</title>
-    <!-- Include Tailwind CSS via CDN -->
-    <link href="https://cdn.tailwindcss.com/latest.css" rel="stylesheet">
+    <!-- tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/babel-standalone/babel.min.js"></script>
 </head>
+
 <body class="bg-gray-100">
     <div id="root"></div>
     <script type="text/babel">
         function App() {
-            const [data, setData] = React.useState(null);
             const [error, setError] = React.useState(null);
-            const [inputValue, setInputValue] = React.useState('');
-            const [selectedOption, setSelectedOption] = React.useState('');
+            const [promptValue, setPromptValue] = React.useState('');
+            const [aiResult, setAiResult] = React.useState('');
+            const [selectedModel, setSelectedModel] = React.useState('');
+            const [lastPrompt, setLastPrompt] = React.useState('');
+            const [lastModel, setLastModel] = React.useState('');
+            const [loading, setLoading] = React.useState(false);
+            const [serverStatus, setServerStatus] = React.useState(false);
 
             React.useEffect(() => {
-                fetch('http://127.0.0.1:5000/api/data')
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error('Network response was not ok ' + response.statusText);
-                        }
-                        return response.json();
-                    })
-                    .then(data => setData(data))
-                    .catch(error => {
-                        setError(error);
-                        console.error('Fetch error:', error);
-                    });
+                const checkServerStatus = () => {
+                    fetch('http://127.0.0.1:5000/api/status')
+                        .then(response => {
+                            if (response.ok) {
+                                setServerStatus(true);
+                            } else {
+                                setServerStatus(false);
+                            }
+                        })
+                        .catch(error => {
+                            setServerStatus(false);
+                            console.error('Error checking server status:', error);
+                        });
+                };
+
+                checkServerStatus();
+                const intervalId = setInterval(checkServerStatus, 5000);
+
+                return () => clearInterval(intervalId);
             }, []);
 
-            const handleButtonClick = () => {
-                fetch('http://127.0.0.1:5000/api/button-clicked', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ buttonName: 'Example Button' }),
-                })
-                .then(response => response.json())
-                .then(data => console.log('Button click response:', data))
-                .catch(error => console.error('Error calling button click API:', error));
-            };
-
-            const handleDropdownChange = (e) => {
+            const handleModelChange = (e) => {
                 const selectedValue = e.target.value;
-                setSelectedOption(selectedValue);
 
-                fetch('http://127.0.0.1:5000/api/dropdown-selected', {
+                fetch('http://127.0.0.1:5000/api/model-dropdown-selected', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -60,80 +58,136 @@
                 })
                 .then(response => response.json())
                 .then(data => {
-                    setData(data);
+                    setAiResult('')
+                    setError(null)
+                    setSelectedModel(data['model']);
                     console.log('Dropdown selection response:', data);
                 })
                 .catch(error => console.error('Error calling dropdown selection API:', error));
             };
 
-            const handleSubmit = (e) => {
-                e.preventDefault();
-                // Handle form submission logic here, if needed
-                console.log('Form submitted with value:', inputValue);
+            const handlePromptChange = (e) => {
+                setPromptValue(e.target.value);
+
+                if (error) {
+                    setError(null)
+                }
             };
 
-            if (error) {
-                return <div>Error: {error.message}</div>;
-            }
+            const handlePromptSubmit = (e) => {
+                e.preventDefault();
+
+                console.log('Form submitted with user input:', promptValue);
+
+                if (promptValue == '') setError("Please enter a prompt")
+                else if (promptValue == lastPrompt && selectedModel == lastModel) setError("Please enter a new prompt or change models")
+                else {
+                    setLoading(true);
+                    setLastModel(selectedModel)
+                    setLastPrompt(promptValue)
+                    setError(null)
+                    fetch('http://127.0.0.1:5000/api/prompt-submission', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ prompt: promptValue, model: selectedModel }),
+                    })
+                    .then(response => response.json())
+                    .then(responseData => {
+                        if (responseData['response'] == 'Please select a model') setError("Please select a model")
+                        else if (responseData['response'].substring(0,6) == "Error:") setError(responseData['response'] )
+                        else setAiResult(responseData);
+                        console.log('API response:', responseData);
+                    })
+                    .catch(error => {
+                        console.error('Error calling prompt submission API:', error);
+                        setError(error);
+                    })
+                    .finally(() => {
+                        setLoading(false);
+                    });
+                }
+            };
+
 
             return (
                 <div className="container mx-auto mt-8 p-4 bg-white shadow-md rounded-lg">
-                    <h1 className="text-2xl font-bold mb-4">Rysun Ai Project - Omkar Patel</h1>
-                    
-                    {/* Button */}
-                    {/* <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" onClick={handleButtonClick}>
-                        Call Backend Function (Button Click)
-                    </button> */}
-                    
-                    <hr className="my-4"/>
-                    
-                    {/* Dropdown */}
-                    <div className="relative inline-block text-left">
-                        <h3>Select your AI model</h3>
-                        <select className="bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded inline-flex items-center" onChange={handleDropdownChange}>
-                            <option value="">Select an option</option>
-                            <option value="ChatGPT">ChatGPT</option>
-                            <option value="Bard">Bard</option>
-                            <option value="Meta AI">Meta AI</option>
-                        </select>
-                        
-                        {selectedOption && data && (
-                        <div className="mt-4">
-                            <p>Selected Model: {data.models.join(",")}</p>
-                        </div>
+                    <h1 className="text-2xl font-bold mb-4 text-center border-b-2 border-gray-300 pb-2">Rysun Ai Project - Omkar Patel</h1>
+
+                    <div className="mt-4 text-center">
+                        {serverStatus ? (
+                            <div className="text-green-500 font-semibold">Server is connected.</div>
+                        ) : (
+                            <div className="text-red-500 font-semibold">Server is not connected.</div>
                         )}
                     </div>
-                    
-                    <hr className="my-4"/>
-                    
-                    {/* Headers */}
-                    <h2 className="text-xl font-bold mb-2">Headers</h2>
-                    <h3 className="text-lg font-semibold mb-2">Subheaders</h3>
-                
-                    
-                    <hr className="my-4"/>
-                    
-                    {/* Textbox */}
-                    <form onSubmit={handleSubmit}>
-                        <input
-                            type="text"
-                            value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            className="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            placeholder="Enter your prompt"
-                        />
-                        <button type="submit" className="mt-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-                            Submit
-                        </button>
-                    </form>
-                    
-                    {/* Display fetched data */}
-                    {data && (
-                        <div className="mt-4">
-                            <p className="text-lg">Data from selected model:</p>
-                            <p>{data.message}</p>
+                    <hr className="my-4" />
+
+                    <div className="flex">
+                        <div className="w-1/4">
+                            {/* Left-aligned section */}
+                            <div className="bg-gray-200 p-4 rounded-lg">
+                                <div className="mb-4 border-b-2 border-gray-300 pb-2">
+                                    <h3 className="text-lg font-semi bold text-center">Select your AI model</h3>
+                                    <select
+                                        className="bg-gray-300 text-gray-700 font-semibold py-2 px-2 rounded w-full"
+                                        onChange={handleModelChange}
+                                        disabled={!serverStatus}
+                                    >
+                                        <option value=""></option>
+                                        <option value="ChatGPT">ChatGPT</option>
+                                        <option value="Bard">Bard</option>
+                                        <option value="Meta AI">Meta AI</option>
+                                    </select>
+
+                                    {/*{selectedModel && (
+                                        <div className="mt-2 px-1">
+                                            <p>Selected Model: {selectedModel}</p>
+                                        </div>
+                                    )} */}
+                                </div>
+
+                                
+
+                                {/* Textbox and Submit Button */}
+                                <form onSubmit={handlePromptSubmit}>
+                                    <textarea
+                                        value={promptValue}
+                                        onChange={handlePromptChange}
+                                        className="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                        placeholder="Enter your prompt"
+                                        disabled={!serverStatus}
+                                        rows="4"
+                                    />
+
+                                    <button
+                                        type="submit"
+                                        className= {loading || !serverStatus || error ? "mt-2 bg-gray-500 text-white font-bold py-2 px-4 w-full rounded" : "mt-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 w-full rounded"}
+                                        disabled={loading || !serverStatus || error}
+                                    >
+                                        {loading ? 'Loading...' : 'Submit'}
+                                    </button>
+                                </form>
+                            </div>
+                            { error && (
+                                <div className="bg-gray-200 p-4 rounded-lg mt-4">
+                                    <p className="text-red-500 font-semibold text-center">{error}</p>
+                                </div>
+                            )}
                         </div>
-                    )}
+
+                        <div className="w-3/4 ml-4 flex">
+                            {/* Right-aligned section */}
+                            <div className="p-4 bg-white shadow-md rounded-lg w-full h-96 overflow-auto">
+                                {aiResult && (
+                                    <div className="mt-4">
+                                        <p><b>{selectedModel}</b>: {aiResult['response']}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             );
         }
