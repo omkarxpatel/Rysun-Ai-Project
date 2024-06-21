@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rysun Ai Project - Omkar Patel</title>
+
     <!-- tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react/umd/react.development.js" crossorigin></script>
@@ -15,36 +16,76 @@
     <div id="root"></div>
     <script type="text/babel">
         function App() {
-            const [error, setError] = React.useState(null);
+            
             const [promptValue, setPromptValue] = React.useState('');
-            const [aiResult, setAiResult] = React.useState('');
+            const [noteValue, setNoteValue] = React.useState('');
+            const [keywordValue, setKeywordValue] = React.useState('');
             const [selectedModel, setSelectedModel] = React.useState('');
+            const [selectedTone, setSelectedTone] = React.useState('');
+            const [selectedStyle, setSelectedStyle] = React.useState('');
+            const [selectedLength, setSelectedLength] = React.useState('');
+            const [selectedComplexity, setSelectedComplexity] = React.useState('');
+            const [selectedOption, setSelectedOption] = React.useState('');
+
+            const [aiResult, setAiResult] = React.useState('');
+            const [gptResult, setGptResult] = React.useState('');
+            const [metaResult, setMetaResult] = React.useState('')
+            const [parameterizedPromptValue, setParameterizedPromptChange] = React.useState('');
+            const [gptScore, setGptScore] = React.useState(2);
+            const [metaScore, setMetaScore] = React.useState(2);
+            const [bardScore, setBardScore] = React.useState(2);
+
             const [lastPrompt, setLastPrompt] = React.useState('');
             const [lastModel, setLastModel] = React.useState('');
+
+            const [error, setError] = React.useState(null);
             const [loading, setLoading] = React.useState(false);
             const [serverStatus, setServerStatus] = React.useState(false);
+            const [countdown, setCountdown] = React.useState(5);
 
+            const[count, setCount] = React.useState(0);
+
+            
             React.useEffect(() => {
                 const checkServerStatus = () => {
-                    fetch('http://127.0.0.1:5000/api/status')
-                        .then(response => {
-                            if (response.ok) {
-                                setServerStatus(true);
-                            } else {
-                                setServerStatus(false);
+                fetch('http://127.0.0.1:5000/api/status')
+                    .then(response => {
+                        if (response.ok) {
+                            setServerStatus(true);
+
+                            if (count == 0) {
+                                setCount(1)
+                                setError(null)
                             }
-                        })
-                        .catch(error => {
+                            setCountdown(5); // Reset the countdown when server is connected
+                        } else {
+                            setCount(0)
                             setServerStatus(false);
-                            console.error('Error checking server status:', error);
-                        });
-                };
-
-                checkServerStatus();
-                const intervalId = setInterval(checkServerStatus, 5000);
-
+                            setError('Server is not connected');
+                        }
+                    })
+                    .catch(error => {
+                        setServerStatus(false);
+                        setError('Server is not connected');
+                        console.error('Error checking server status:', error);
+                    });
+            };
+            
+                const intervalId = setInterval(() => {
+                    setCountdown(prevCountdown => {
+                        if (prevCountdown === 1) {
+                            checkServerStatus();
+                            return 5; // Reset countdown after checking server status
+                        }
+                        return prevCountdown - 1;
+                    });
+                }, 1000);
+            
+                checkServerStatus(); // Initial check
+            
                 return () => clearInterval(intervalId);
             }, []);
+            
 
             const handleModelChange = (e) => {
                 const selectedValue = e.target.value;
@@ -58,10 +99,31 @@
                 })
                 .then(response => response.json())
                 .then(data => {
-                    setAiResult('')
-                    setError(null)
-                    setSelectedModel(data['model']);
+                    setAiResult('');
+                    setError(null);
+                    setSelectedModel(data.model);
                     console.log('Dropdown selection response:', data);
+                })
+                .catch(error => console.error('Error calling dropdown selection API:', error));
+            };
+
+            const handleSelectionChange = (setter) => (e) => {
+                const selectedValue = e.target.value;
+                setter(selectedValue);
+                setError(null)
+                setLastPrompt("")
+
+
+                fetch('http://127.0.0.1:5000/api/selection-choice', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ selectedOption: selectedValue }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
                 })
                 .catch(error => console.error('Error calling dropdown selection API:', error));
             };
@@ -70,46 +132,137 @@
                 setPromptValue(e.target.value);
 
                 if (error) {
-                    setError(null)
+                    setError(null);
                 }
             };
+
+            const handleParameterizedPromptChange = (e) => {
+                setParameterizedPromptChange(e.target.value);
+            }
+
+            const handleSliderChangeG = (event) => {
+                setGptScore(event.target.value);
+            };
+            const handleSliderChangeM = (event) => {
+                setMetaScore(event.target.value);
+            };
+            const handleSliderChangeB = (event) => {
+                setBardScore(event.target.value);
+            };
+
+            const handleNoteChange = (e) => {
+                setNoteValue(e.target.value);
+                setError(null)
+                setLastPrompt("")
+            }
+
+            const handleKeywordChange = (e) => {
+                setKeywordValue(e.target.value);
+                setError(null)
+                setLastPrompt("")
+            }
 
             const handlePromptSubmit = (e) => {
                 e.preventDefault();
-
                 console.log('Form submitted with user input:', promptValue);
-
-                if (promptValue == '') setError("Please enter a prompt")
-                else if (promptValue == lastPrompt && selectedModel == lastModel) setError("Please enter a new prompt or change models")
+            
+                if (promptValue === '') setError("Please enter a prompt");
+                else if (promptValue === lastPrompt && selectedModel === lastModel) setError("Please enter a new prompt or change models");
                 else {
+                    console.log(promptValue);
                     setLoading(true);
-                    setLastModel(selectedModel)
-                    setLastPrompt(promptValue)
-                    setError(null)
+                    setLastModel(selectedModel);
+                    setLastPrompt(promptValue);
+                    setError(null);
+                    setAiResult({ gptResponse: '', bardResponse: '', metaResponse: '' });
+            
                     fetch('http://127.0.0.1:5000/api/prompt-submission', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ prompt: promptValue, model: selectedModel }),
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt: promptValue, model: selectedModel, notes: noteValue, keywords: keywordValue }),
                     })
-                    .then(response => response.json())
-                    .then(responseData => {
-                        if (responseData['response'] == 'Please select a model') setError("Please select a model")
-                        else if (responseData['response'].substring(0,6) == "Error:") setError(responseData['response'] )
-                        else setAiResult(responseData);
-                        console.log('API response:', responseData);
+                    .then(() => {
+                        let eventSourceGpt = new EventSource('http://127.0.0.1:5000/api/stream-results/gpt');
+                        eventSourceGpt.onmessage = (e) => {
+                            let temp = e.data;
+                            const r = temp.replace(/`/g, "\n");
+                            setAiResult(prevState => ({ ...prevState, gptResponse: r }));
+                            eventSourceGpt.close();
+                        };
+            
+                        let eventSourceBard = new EventSource('http://127.0.0.1:5000/api/stream-results/bard');
+                        eventSourceBard.onmessage = (e) => {
+                            let temp = e.data;
+                            const r = temp.replace(/`/g, "\n");
+                            setAiResult(prevState => ({ ...prevState, bardResponse: r }));
+                            eventSourceBard.close();
+                        };
+            
+                        let eventSourceMeta = new EventSource('http://127.0.0.1:5000/api/stream-results/meta');
+                        eventSourceMeta.onmessage = (e) => {
+                            let temp = e.data;
+                            const r = temp.replace(/`/g, "\n");
+                            setAiResult(prevState => ({ ...prevState, metaResponse: r }));
+                            eventSourceMeta.close();
+                            setLoading(false); // relies on the fact that meta is the slowest
+                        };
                     })
                     .catch(error => {
                         console.error('Error calling prompt submission API:', error);
-                        setError(error);
+                        setError(error.toString());
                     })
-                    .finally(() => {
-                        setLoading(false);
-                    });
                 }
             };
-
+            
+            const handleRegenerate = (type) => {
+                setLoading(true);
+                setError(null);
+            
+                const promptType = type === "title" ? "Regenerate Title of this email but keep the text the exact same"+aiResult : "Regenerate Text of this email but keep the title the exact same"+aiResult;
+                const prompt = `${promptValue} -- ${promptType}`;
+            
+                fetch('http://127.0.0.1:5000/api/prompt-submission', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ prompt, model: selectedModel , notes: noteValue, keywords: keywordValue }),
+                })
+                .then(response => response.json())
+                .then(responseData => {
+                    if (responseData.response === 'Please select a model') setError("Please select a model");
+                    else if (responseData.response.substring(0, 6) === "Error:") setError(responseData.response);
+                    else setAiResult(responseData);
+                    console.log('API response:', responseData);
+                })
+                .catch(error => {
+                    console.error('Error calling prompt submission API:', error);
+                    setError(error.toString());
+                })
+                .finally(() => {
+                    setLoading(false);
+                });
+            };
+            
+            const handleOptionChange = (e) => {
+                setSelectedOption(e.target.value);
+                setError(null);
+                setLastPrompt("");
+            
+                fetch('http://127.0.0.1:5000/api/selection-choice', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ selectedOption: e.target.value }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                })
+                .catch(error => console.error('Error calling selection choice API:', error));
+            };
+            
 
             return (
                 <div className="container mx-auto mt-8 p-4 bg-white shadow-md rounded-lg">
@@ -119,7 +272,14 @@
                         {serverStatus ? (
                             <div className="text-green-500 font-semibold">Server is connected.</div>
                         ) : (
-                            <div className="text-red-500 font-semibold">Server is not connected.</div>
+                            
+                            <div className="text-red-500 font-semibold">
+                                <div class="inline-block h-4 w-4 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status">
+                                    <span class="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]">Loading...</span>
+                                </div>
+                                &nbsp; Server is not connected. Retrying in {countdown} seconds.
+                                <span id="time"></span>
+                            </div>
                         )}
                     </div>
                     <hr className="my-4" />
@@ -128,65 +288,368 @@
                         <div className="w-1/4">
                             {/* Left-aligned section */}
                             <div className="bg-gray-200 p-4 rounded-lg">
+                                {/*
                                 <div className="mb-4 border-b-2 border-gray-300 pb-2">
-                                    <h3 className="text-lg font-semi bold text-center">Select your AI model</h3>
+                                    
+                                    {selectedModel && (
+                                        <h3 className="text-lg font-semibold text-center text-gray-700 font-semibold text-xs">Select Roleplay</h3>
+                                    )}
                                     <select
                                         className="bg-gray-300 text-gray-700 font-semibold py-2 px-2 rounded w-full"
                                         onChange={handleModelChange}
+                                        value={selectedModel}
                                         disabled={!serverStatus}
                                     >
-                                        <option value=""></option>
+                                        <option value="" disabled>Select your AI model</option>
                                         <option value="ChatGPT">ChatGPT</option>
                                         <option value="Bard">Bard</option>
                                         <option value="Meta AI">Meta AI</option>
                                     </select>
-
-                                    {/*{selectedModel && (
-                                        <div className="mt-2 px-1">
-                                            <p>Selected Model: {selectedModel}</p>
-                                        </div>
-                                    )} */}
+                                    <select
+                                        className="bg-gray-300 text-gray-700 font-semibold py-2 px-2 rounded w-full"
+                                        onChange={handleModelChange}
+                                        value={selectedModel}
+                                        disabled={!serverStatus}
+                                    >
+                                        <option value="" disabled>Select Roleplay</option>
+                                        <option value="ChatGPT">Sales Manager</option>
+                                        <option value="Bard">Stock Expert</option>
+                                        <option value="Meta AI">Customer Support</option>
+                                    </select>
                                 </div>
-
+                                */}
+                                {/*
+                                <div className="mb-4">
+                                    <p className="font-semibold">Choose Option</p>
+                                    <div className="flex items-center mb-2">
+                                        <input
+                                            type="radio"
+                                            id="option1"
+                                            name="option"
+                                            value="Option1"
+                                            className="mr-2"
+                                            onChange={handleOptionChange}
+                                            disabled={!serverStatus}
+                                        />
+                                        <label htmlFor="option1" className="text-gray-700">Option 1</label>
+                                    </div>
+                                    <div className="flex items-center">
+                                        <input
+                                            type="radio"
+                                            id="option2"
+                                            name="option"
+                                            value="Option2"
+                                            className="mr-2"
+                                            onChange={handleOptionChange}
+                                            disabled={!serverStatus}
+                                        />
+                                        <label htmlFor="option2" className="text-gray-700">Option 2</label>
+                                    </div>
+                                    
+                                </div> */}
                                 
-
                                 {/* Textbox and Submit Button */}
                                 <form onSubmit={handlePromptSubmit}>
+                                    {promptValue && (
+                                        <h5 className="text-gray-700 font-semibold text-xs">Theme/Summary</h5>
+                                    )}
                                     <textarea
                                         value={promptValue}
                                         onChange={handlePromptChange}
-                                        className="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                                        placeholder="Enter your prompt"
+                                        className="block w-full py-2 mb-1 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                        placeholder="Email Theme/Summary"
                                         disabled={!serverStatus}
-                                        rows="4"
+                                        rows="3"
+                                    />
+                                    
+                                    {noteValue && (
+                                        <h5 className="text-gray-700 font-semibold text-xs">Notes</h5>
+                                    )}
+                                    <textarea
+                                        value={noteValue}
+                                        onChange={handleNoteChange} 
+                                        className="block w-full py-2 px-3 mb-1 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                        placeholder="Notes"
+                                        disabled={!serverStatus}
+                                        rows="1"
+                                    />
+                                    
+                                    {keywordValue && (
+                                        <h5 className="text-gray-700 font-semibold text-xs">Keywords</h5>
+                                    )}
+                                    <textarea
+                                        value={keywordValue}
+                                        onChange={handleKeywordChange} 
+                                        className="block w-full py-2 px-3 mb-1 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                        placeholder="Keywords"
+                                        disabled={!serverStatus}
+                                        rows="1"
                                     />
 
+                                    <h5 className="text-gray-700 font-semibold text-xs">Tone</h5>
+                                    <select
+                                        className="bg-gray-300 text-gray-700 mb-1 font-semibold py-2 px-2 rounded w-full"
+                                        onChange={handleSelectionChange(setSelectedTone)}
+                                        value={selectedTone}
+                                        disabled={!serverStatus}
+                                    >
+                                        <option value="Tone of email: Casual">Casual</option>
+                                        <option value="Tone of email: Informal">Informal</option>
+                                        <option value="Tone of email: Friendly">Friendly</option>
+                                        <option value="Tone of email: Formal">Formal</option>
+                                        <option value="Tone of email: Professional">Professional</option>
+                                    </select>
+
+                                    <h5 className="text-gray-700 font-semibold text-xs">Style</h5>
+                                    <select
+                                        className="bg-gray-300 text-gray-700 mb-1 font-semibold py-2 px-2 rounded w-full"
+                                        onChange={handleSelectionChange(setSelectedStyle)}
+                                        value={selectedStyle}
+                                        disabled={!serverStatus}
+                                    >
+                                        <option value="Style of email: Concise">Concise</option>
+                                        <option value="Style of email: Neutral">Neutral</option>
+                                        <option value="Style of email: Polite">Polite</option>
+                                        <option value="Style of email: Persuasive">Persuasive</option>
+                                    </select>
+
+                                    <h5 className="text-gray-700 font-semibold text-xs">Length</h5>
+                                    <select
+                                        className="bg-gray-300 text-gray-700 mb-1 font-semibold py-2 px-2 rounded w-full"
+                                        onChange={handleSelectionChange(setSelectedLength)}
+                                        value={selectedLength}
+                                        disabled={!serverStatus}
+                                    >
+                                        <option value="Length of email: Short">Short</option>
+                                        <option value="Length of email: Medium">Medium</option>
+                                        <option value="Length of email: Long">Long</option>
+                                    </select>
+
+                                    <h5 className="text-gray-700 font-semibold text-xs">Complexity</h5>
+                                    <select
+                                        className="bg-gray-300 text-gray-700 font-semibold py-2 px-2 rounded w-full"
+                                        onChange={handleSelectionChange(setSelectedComplexity)}
+                                        value={selectedComplexity}
+                                        disabled={!serverStatus}
+                                    >
+                                        <option value="Complexity of email: Simple">Simple</option>
+                                        <option value="Complexity of email: Moderate">Moderate</option>
+                                        <option value="Complexity of email: Detailed">Detailed</option>
+                                    </select>
+                                    {/*<textarea
+                                        value={parameterizedPromptValue}
+                                        onChange={handleParameterizedPromptChange}
+                                        className="block w-full mt-2 py-2 mb-1 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                        disabled={!serverStatus}
+                                        rows="10"
+                                    />*/}
                                     <button
                                         type="submit"
-                                        className= {loading || !serverStatus || error ? "mt-2 bg-gray-500 text-white font-bold py-2 px-4 w-full rounded" : "mt-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 w-full rounded"}
+                                        className={loading || !serverStatus || error ? "mt-2 bg-gray-500 text-white font-bold py-2 px-4 w-full rounded" : "mt-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 w-full rounded"}
                                         disabled={loading || !serverStatus || error}
                                     >
-                                        {loading ? 'Loading...' : 'Submit'}
+                                        {loading && (
+                                            <div class="inline-block h-4 w-4 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status">
+                                            <span class="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]">&nbsp;Loading...</span>
+                                            </div>
+                                        )}
+                                        {loading ? '  Loading...  ' : 'Submit'}
                                     </button>
                                 </form>
                             </div>
-                            { error && (
+                            {error && (
                                 <div className="bg-gray-200 p-4 rounded-lg mt-4">
                                     <p className="text-red-500 font-semibold text-center">{error}</p>
+                                </div>
+                            )} 
+                            
+                            
+                        </div>
+
+                        <div className="w-1/4 ml-4 flex flex-col">
+                            {/* Right-aligned section */}
+                            {aiResult && (
+                            <div className="p-4 bg-white shadow-md rounded-lg w-full h-128 overflow-auto">
+                                    <div className="mt-4">
+                                        <p><b>ChatGPT</b>:</p>
+                                        <div className="mt-2 p-2 border border-gray-300 rounded">
+                                            {aiResult.gptResponse ? (
+                                                <p className="whitespace-pre-wrap">{aiResult.gptResponse}</p>
+                                            ): (
+                                                <div class="inline-block h-10 w-10 float-center animate-spin rounded-full border-4 border-solid border-gray-500 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status"></div>
+                                            )}
+                                        </div>
+                                        <div className="mt-4 flex justify-between">
+                                            <button
+                                                onClick={() => handleRegenerate("title")}
+                                                className={loading || !serverStatus || error ? "mr-3 bg-gray-500 text-white font-bold py-2 px-4 rounded" : "mr-3 bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"}
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? 'Loading...' : 'Regenerate Subject (buggy)'}
+
+                                            </button>
+                                            <button
+                                                onClick={() => handleRegenerate("text")}
+                                                className={loading || !serverStatus || error ? "bg-gray-500 text-white font-bold py-2 px-4 rounded" : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"}
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? 'Loading...' : 'Regenerate Text'}
+                                            </button>
+                                        </div>
+
+                                        <div className="flex items-center mt-2">
+                                            <input
+                                                type="range"
+                                                className="flex-grow h-1.5 cursor-pointer appearance-none rounded-lg border-transparent bg-neutral-200"
+                                                min="1"
+                                                max="3"
+                                                id="customRange2"
+                                                value={gptScore}
+                                                onChange={handleSliderChangeG}
+                                            />
+                                            <button
+                                                className="bg-gray-500 text-white font-bold py-2 px-4 rounded ml-2"
+                                                disabled
+                                            >
+                                                {gptScore}
+                                            </button>
+                                            <button
+                                                onClick={() => handleRegenerate("text")}
+                                                className={loading || !serverStatus || error ? "bg-gray-500 text-white font-bold py-2 px-4 rounded ml-2" : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-2"}
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? 'Loading...' : 'Submit'}
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
 
-                        <div className="w-3/4 ml-4 flex">
+                        
+                        <div className="w-1/4 ml-4 flex flex-col">
                             {/* Right-aligned section */}
-                            <div className="p-4 bg-white shadow-md rounded-lg w-full h-96 overflow-auto">
-                                {aiResult && (
+                            {aiResult && (
+                            <div className="p-4 bg-white shadow-md rounded-lg w-full h-128 overflow-auto">
                                     <div className="mt-4">
-                                        <p><b>{selectedModel}</b>: {aiResult['response']}</p>
+                                        <p><b>Bard</b>:</p>
+                                        <div className="mt-2 p-2 border border-gray-300 rounded">
+                                            {aiResult.bardResponse ? (
+                                                <p className="whitespace-pre-wrap">{aiResult.bardResponse}</p>
+                                            ): (
+                                                <div class="inline-block h-10 float-center w-10 animate-spin rounded-full border-4 border-solid border-gray-500 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status"></div>
+                                            )}
+                                        </div>
+                                        <div className="mt-4 flex justify-between">
+                                            <button
+                                                onClick={() => handleRegenerate("title")}
+                                                className={loading || !serverStatus || error ? "mr-3 bg-gray-500 text-white font-bold py-2 px-4 rounded" : "mr-3 bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"}
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? 'Loading...' : 'Regenerate Subject (buggy)'}
+
+                                            </button>
+                                            <button
+                                                onClick={() => handleRegenerate("text")}
+                                                className={loading || !serverStatus || error ? "bg-gray-500 text-white font-bold py-2 px-4 rounded" : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"}
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? 'Loading...' : 'Regenerate Text'}
+                                            </button>
+                                        </div>
+
+                                        <div className="flex items-center mt-2">
+                                            <input
+                                                type="range"
+                                                className="flex-grow h-1.5 cursor-pointer appearance-none rounded-lg border-transparent bg-neutral-200"
+                                                min="1"
+                                                max="3"
+                                                id="customRange2"
+                                                value={bardScore}
+                                                onChange={handleSliderChangeB}
+                                            />
+                                            <button
+                                                className="bg-gray-500 text-white font-bold py-2 px-4 rounded ml-2"
+                                                disabled
+                                            >
+                                                {bardScore}
+                                            </button>
+                                            <button
+                                                onClick={() => handleRegenerate("text")}
+                                                className={loading || !serverStatus || error ? "bg-gray-500 text-white font-bold py-2 px-4 rounded ml-2" : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-2"}
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? 'Loading...' : 'Submit'}
+                                            </button>
+                                        </div>
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </div>
+
+                        <div className="w-1/4 ml-4 flex flex-col">
+                            {/* Right-aligned section */}
+                            {aiResult && (
+                            <div className="p-4 bg-white shadow-md rounded-lg w-full h-128 overflow-auto">
+                                    <div className="mt-4">
+                                        <p><b>MetaAI</b>:</p>
+                                        <div className="mt-2 p-2 border border-gray-300 rounded">
+                                            {aiResult.metaResponse ? (
+                                                <p className="whitespace-pre-wrap">{aiResult.metaResponse}</p>
+                                            ): (
+                                                <div class="inline-block h-10 float-center w-10 animate-spin rounded-full border-4 border-solid border-gray-500 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status"></div>
+                                            )}
+                                        </div>
+                                        <div className="mt-4 flex justify-between">
+                                            <button
+                                                onClick={() => handleRegenerate("title")}
+                                                className={loading || !serverStatus || error ? "mr-3 bg-gray-500 text-white font-bold py-2 px-4 rounded" : "mr-3 bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"}
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? 'Loading...' : 'Regenerate Subject (buggy)'}
+
+                                            </button>
+                                            <button
+                                                onClick={() => handleRegenerate("text")}
+                                                className={loading || !serverStatus || error ? "bg-gray-500 text-white font-bold py-2 px-4 rounded" : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"}
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? 'Loading...' : 'Regenerate Text'}
+                                            </button>
+                                        </div>
+
+                                        <div className="flex items-center mt-2">
+                                            <input
+                                                type="range"
+                                                className="flex-grow h-1.5 cursor-pointer appearance-none rounded-lg border-transparent bg-neutral-200"
+                                                min="1"
+                                                max="3"
+                                                id="customRange2"
+                                                value={metaScore}
+                                                onChange={handleSliderChangeM}
+                                            />
+                                            <button
+                                                className="bg-gray-500 text-white font-bold py-2 px-4 rounded ml-2"
+                                                disabled
+                                            >
+                                                {metaScore}
+                                            </button>
+                                            <button
+                                                onClick={() => handleRegenerate("text")}
+                                                className={loading || !serverStatus || error ? "bg-gray-500 text-white font-bold py-2 px-4 rounded ml-2" : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-2"}
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? 'Loading...' : 'Submit'}
+                                            </button>
+                                        </div>
+                                        
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        
+                        
+                        
                     </div>
                 </div>
             );
