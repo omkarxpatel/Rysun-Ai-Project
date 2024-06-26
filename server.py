@@ -36,7 +36,7 @@ import os
 import threading
 import time
 
-from constants import PROMPT_INFO, META_SPECIAL, DEFAULT_VALUES
+from constants import PROMPT_INFO, META_SPECIAL, DEFAULT_VALUES, ROLE_VALUES, PRECON, REGEN_TITLE
 
 # Load environment variables
 load_dotenv()
@@ -54,6 +54,18 @@ meta_client = MetaAI()
 # Information to use to pass into models
 data = {'model': ''}  # Stores current model selection and status
 additional = DEFAULT_VALUES
+last_data = {
+    "precon": "",
+    "prompt": "",
+}
+streaming_results = {
+    "gpt": "", 
+    "gpt_title": "",
+    "bard": "", 
+    "bard_title":"",
+    "meta": "",
+    "meta_title":"",
+}
 
 
 # Status of API. Gets pinged every 5 seconds.
@@ -64,35 +76,198 @@ def get_status():
 
 streaming_results = {"gpt": "", "bard": "", "meta": ""}
 
-def process_gpt(prompt, streaming_results):
+def process_gpt(preconditional, prompt, streaming_results):
     try:
-        completion = chatgpt_client.chat.completions.create(
+        # preconditional_completion = chatgpt_client.chat.completions.create(
+        #     model="gpt-3.5-turbo",
+        #     # model="gpt-4o",
+        #     messages=[{"role": "system", "content": preconditional}]
+        # )
+        
+        # precon_response = preconditional_completion.choices[0].message.content
+
+        prompt_completion = chatgpt_client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": prompt}]
+            messages=[
+                # {"role": "system", "content": preconditional},
+                # {"role": "assistant", "content": precon_response},
+                {"role": "user", "content": preconditional+prompt}
+            ]
         )
-        streaming_results["gpt"] = completion.choices[0].message.content
-        print(streaming_results)
+        print(prompt_completion.choices)
+        print(preconditional, prompt)
+        
+        streaming_results["gpt"] = prompt_completion.choices[0].message.content
+        streaming_results["gpt_title"] = str(streaming_results["gpt"].split("\n")[0])
+        streaming_results["gpt"] = str("\n".join(streaming_results["gpt"].split("\n")[1:]))
+        print("GPT result: ", streaming_results["gpt"])
+        print(f"\n\nTitle: {streaming_results["gpt_title"]}\n\n")
     except Exception as e:
         streaming_results["gpt"] = f"Error: {e}"
 
-def process_bard(prompt, streaming_results):
+
+def process_bard(preconditional, prompt, streaming_results):
     try:
-        bard_result = bard_client.generate_content(prompt).text
+        # bard_client.generate_content(preconditional)
+        preconditional += prompt
+        
+        bard_result = bard_client.generate_content(preconditional).text
+        
         streaming_results["bard"] = bard_result
+        streaming_results["bard_title"] = str(streaming_results["bard"].split("\n")[0])
+        streaming_results["bard"] = str("\n".join(streaming_results["bard"].split("\n")[1:]))
+        
     except Exception as e:
         streaming_results["bard"] = f"Error: {e}"
 
-def process_meta(prompt, streaming_results):
+def process_meta(preconditional, prompt, streaming_results):
     try:
-        meta_result = meta_client.prompt(message=prompt + META_SPECIAL)['message']
+        # meta_client.prompt(message=preconditional + META_SPECIAL)
+        
+        meta_result = meta_client.prompt(message=preconditional + prompt + META_SPECIAL)['message']
         streaming_results["meta"] = meta_result
+        val = streaming_results["meta"].split("\n")[0]
+        start = 1
+        if val[0:7] == "Subject":
+            start = 0
+            
+        streaming_results["meta_title"] = str(streaming_results["meta"].split("\n")[start])
+        streaming_results["meta"] = str("\n".join(streaming_results["meta"].split("\n")[start+1:]))
     except Exception as e:
         streaming_results["meta"] = f"Error: {e}"
 
+@app.route('/api/gpt-regen', methods=['POST'])
+def handle_gpt_regen():
+    global streaming_results
+    try:
+        streaming_results["gpt"] = ""
+
+        gpt_thread = threading.Thread(target=process_gpt, args=(last_data["precon"], last_data["prompt"], streaming_results))
+        gpt_thread.start()
+        
+        return jsonify({"status": "Processing"}), 200
+    except Exception as e:
+        return jsonify({"status": "Error", "message": str(e)}), 500
+    
+@app.route('/api/gpt-regen-title', methods=['POST'])
+def handle_gpt_regen_title():
+    try:
+        data = request.get_json()
+        gpt_title = data.get("gptTitle", "")
+        gpt_response = data.get("gptResponse", "")
+        
+        if not gpt_response:
+            raise ValueError("gptResponse is required")
+        
+        title = regen_title_gpt(gpt_response)
+        print("title: ", title)
+        return jsonify({"status": "Success", "title": title}), 200
+    except Exception as e:
+        print("Error:", str(e))
+        return jsonify({"status": "Error", "message": str(e)}), 500
+        
+@app.route('/api/bard-regen-title', methods=['POST'])
+def handle_bard_regen_title():
+    try:
+        data = request.get_json()
+        bard_title = data.get("bardTitle", "")
+        bard_response = data.get("bardResponse", "")
+        
+        if not bard_response:
+            raise ValueError("bardResponse is required")
+        
+        title = regen_title_bard(bard_response)
+        print("title: ", title)
+        return jsonify({"status": "Success", "title": title}), 200
+    except Exception as e:
+        print("Error:", str(e))
+        return jsonify({"status": "Error", "message": str(e)}), 500
+        
+@app.route('/api/meta-regen-title', methods=['POST'])
+def handle_meta_regen_title():
+    try:
+        data = request.get_json()
+        gpt_title = data.get("gptTitle", "")
+        gpt_response = data.get("gptResponse", "")
+        
+        if not gpt_response:
+            raise ValueError("gptResponse is required")
+        
+        title = regen_title_meta(gpt_response)
+        print("title: ", title)
+        return jsonify({"status": "Success", "title": title}), 200
+    except Exception as e:
+        print("Error:", str(e))
+        return jsonify({"status": "Error", "message": str(e)}), 500
+
+def regen_title_gpt(resp):
+    try:
+        prompt_completion = chatgpt_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "user", "content": REGEN_TITLE + streaming_results["gpt_title"] + resp}
+            ]
+        )
+        
+        title = prompt_completion.choices[0].message.content
+        print("regen title,", title)
+        return title
+    except Exception as e:
+        print("Exception in regen_title:", str(e))
+        raise e
+    
+def regen_title_bard(resp):
+    try:
+        title = bard_client.generate_content(REGEN_TITLE + streaming_results["bard_title"] + resp).text
+        
+        print("regen title,", title)
+        return title
+    except Exception as e:
+        print("Exception in regen_title:", str(e))
+        raise e
+    
+def regen_title_meta(resp):
+    try:
+        title = meta_client.prompt(message=REGEN_TITLE + streaming_results["meta_title"] + resp)['message']
+        
+        print("regen title,", title)
+        return title
+    except Exception as e:
+        print("Exception in regen_title:", str(e))
+        raise e
+
+
+@app.route('/api/bard-regen', methods=['POST'])
+def handle_bard_regen():
+    global streaming_results
+    try:
+        streaming_results["bard"] = ""
+
+        bard_thread = threading.Thread(target=process_bard, args=(last_data["precon"], last_data["prompt"], streaming_results))
+        bard_thread.start()
+        
+        return jsonify({"status": "Processing"}), 200
+    except Exception as e:
+        return jsonify({"status": "Error", "message": str(e)}), 500
+    
+@app.route('/api/meta-regen', methods=['POST'])
+def handle_meta_regen():
+    global streaming_results
+    try:
+        streaming_results["meta"] = ""
+
+        meta_thread = threading.Thread(target=process_meta, args=(last_data["precon"], last_data["prompt"], streaming_results))
+        meta_thread.start()
+        
+        return jsonify({"status": "Processing"}), 200
+    except Exception as e:
+        return jsonify({"status": "Error", "message": str(e)}), 500
+    
 @app.route('/api/prompt-submission', methods=['POST'])
 def handle_prompt_submission():
     global streaming_results
     request_data = request.get_json()
+    precon = request_data.get('role') + "\n\n"
     prompt = request_data.get('prompt')
     
     if not prompt:
@@ -105,17 +280,21 @@ def handle_prompt_submission():
     notes = request_data.get('notes')
     keywords = request_data.get('keywords')
     if additional:
-        prompt += f"-- Additional info: {additional}"
+        precon += f"-- Additional info: {additional}"
     if notes:
-        prompt += f"-- Notes: {notes}"
+        precon += f"-- Notes: {notes}"
     if keywords:
-        prompt += f"-- Keywords: {keywords}"
-    prompt += f"\n{PROMPT_INFO}"
+        precon += f"-- Keywords: {keywords}"
+    precon += f"\n{PROMPT_INFO}"
+    # precon += f"\n{PRECON}"
     
+    last_data["precon"] = precon
+    last_data["prompt"] = prompt
+    print([precon, prompt])
     # Start threads for each model
-    gpt_thread = threading.Thread(target=process_gpt, args=(prompt, streaming_results))
-    bard_thread = threading.Thread(target=process_bard, args=(prompt, streaming_results))
-    meta_thread = threading.Thread(target=process_meta, args=(prompt, streaming_results))
+    gpt_thread = threading.Thread(target=process_gpt, args=(precon, prompt, streaming_results))
+    bard_thread = threading.Thread(target=process_bard, args=(precon, prompt, streaming_results))
+    meta_thread = threading.Thread(target=process_meta, args=(precon, prompt, streaming_results))
     
     gpt_thread.start()
     bard_thread.start()
@@ -129,10 +308,12 @@ def stream_results(model):
     def generate():
         while not streaming_results[model]:
             time.sleep(1)
-        s = f"data: {streaming_results[model].replace('\n', '`')}\n\n"
+        title = streaming_results[f"{model}_title"].replace('\n', '`')
+        content = streaming_results[model].replace('\n', '`')
+        s = f"data: {{\"title\": \"{title}\", \"content\": \"{content}\"}}\n\n"
         print(s)
         yield s
-    
+
     return Response(generate(), mimetype='text/event-stream')
 
 
@@ -146,6 +327,16 @@ def handle_model_dropdown_selected():
     data['model'] = selected_option
     data['model_selection_message'] = f'Selected model: "{selected_option}"'
 
+    return jsonify(data)
+
+@app.route('/api/role-dropdown-selected', methods=['POST'])
+def handle_role_dropdown_selected():
+    selected_data = request.json
+    selected_option = selected_data.get('selectedOption')
+    print(f'Dropdown role "{selected_option}" has been selected.')
+
+    data['role'] = selected_option
+    data['info'] = ROLE_VALUES.get(selected_option)
     return jsonify(data)
 
 # Handles logic for when a user selects options in the dropdown menu
@@ -176,11 +367,12 @@ def run_app_with_retries():
 
 # Main function
 def main(val):
-    if val:
-        value = int(input("(1) One time server\n(2) Server with error handling\n> "))
-        if value == 1:
-            app.run(debug=True)
-    app.run(debug=False)
+    # if val:
+    #     value = int(input("(1) One time server\n(2) Server with error handling\n> "))
+    #     if value == 1:
+            # app.run(debug=True)
+    # app.run(debug=False)
+    run_app_with_retries()
 
 if __name__ == '__main__':
-    main(False)
+    main(True)

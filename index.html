@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rysun Ai Project - Omkar Patel</title>
+    <link rel="shortcut icon" href="https://intranet.rysun.com/assets/images/favicon.png"/>
 
     <!-- tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -26,8 +27,11 @@
             const [selectedLength, setSelectedLength] = React.useState('');
             const [selectedComplexity, setSelectedComplexity] = React.useState('');
             const [selectedOption, setSelectedOption] = React.useState('');
+            const [selectedRole, setSelectedRole] = React.useState('');
+            const [roleInfo, setRoleInfo] = React.useState('');
 
             const [aiResult, setAiResult] = React.useState('');
+            const [gptSubject, setGptSubject] = React.useState('');
             const [gptResult, setGptResult] = React.useState('');
             const [metaResult, setMetaResult] = React.useState('')
             const [parameterizedPromptValue, setParameterizedPromptChange] = React.useState('');
@@ -57,6 +61,7 @@
                                 setCount(1)
                                 setError(null)
                             }
+                            
                             setCountdown(5); // Reset the countdown when server is connected
                         } else {
                             setCount(0)
@@ -73,6 +78,7 @@
             
                 const intervalId = setInterval(() => {
                     setCountdown(prevCountdown => {
+                        console.log(gptResult)
                         if (prevCountdown === 1) {
                             checkServerStatus();
                             return 5; // Reset countdown after checking server status
@@ -107,6 +113,25 @@
                 .catch(error => console.error('Error calling dropdown selection API:', error));
             };
 
+            const handleRoleChange = (e) => {
+                const selectedValue = e.target.value;
+
+                fetch('http://127.0.0.1:5000/api/role-dropdown-selected', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ selectedOption: selectedValue }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    setSelectedRole(data.role);
+                    setRoleInfo(data.info)
+                    console.log('Dropdown selection response:', data);
+                })
+                .catch(error => console.error('Error calling dropdown selection API:', error));
+            }
+
             const handleSelectionChange = (setter) => (e) => {
                 const selectedValue = e.target.value;
                 setter(selectedValue);
@@ -138,6 +163,10 @@
 
             const handleParameterizedPromptChange = (e) => {
                 setParameterizedPromptChange(e.target.value);
+            }
+
+            const handleRoleInfoChange = (e) => {
+                setRoleInfo(e.target.value)
             }
 
             const handleSliderChangeG = (event) => {
@@ -179,31 +208,40 @@
                     fetch('http://127.0.0.1:5000/api/prompt-submission', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ prompt: promptValue, model: selectedModel, notes: noteValue, keywords: keywordValue }),
+                        body: JSON.stringify({ prompt: promptValue, model: selectedModel, notes: noteValue, keywords: keywordValue , role: roleInfo}),
                     })
                     .then(() => {
                         let eventSourceGpt = new EventSource('http://127.0.0.1:5000/api/stream-results/gpt');
                         eventSourceGpt.onmessage = (e) => {
                             let temp = e.data;
-                            const r = temp.replace(/`/g, "\n");
-                            setAiResult(prevState => ({ ...prevState, gptResponse: r }));
+                            const jsonData = JSON.parse(temp.replace('data: ', ''))
+
+                            const title = jsonData["title"];
+                            const content = jsonData["content"].replace(/`/g, "\n");
+                            setAiResult(prevState => ({ ...prevState, gptTitle: title, gptResponse: content }));
                             eventSourceGpt.close();
                         };
             
                         let eventSourceBard = new EventSource('http://127.0.0.1:5000/api/stream-results/bard');
                         eventSourceBard.onmessage = (e) => {
                             let temp = e.data;
-                            const r = temp.replace(/`/g, "\n");
-                            setAiResult(prevState => ({ ...prevState, bardResponse: r }));
+                            const jsonData = JSON.parse(temp.replace('data: ', ''))
+
+                            const title = jsonData["title"];
+                            const content = jsonData["content"].replace(/`/g, "\n");
+                            setAiResult(prevState => ({ ...prevState, bardTitle: title, bardResponse: content }));
                             eventSourceBard.close();
                         };
             
                         let eventSourceMeta = new EventSource('http://127.0.0.1:5000/api/stream-results/meta');
                         eventSourceMeta.onmessage = (e) => {
                             let temp = e.data;
-                            const r = temp.replace(/`/g, "\n");
-                            setAiResult(prevState => ({ ...prevState, metaResponse: r }));
-                            eventSourceMeta.close();
+                            const jsonData = JSON.parse(temp.replace('data: ', ''))
+
+                            const title = jsonData["title"];
+                            const content = jsonData["content"].replace(/`/g, "\n\n");
+                            setAiResult(prevState => ({ ...prevState, metaTitle: title, metaResponse: content }));
+                            eventSourceMeta.close()
                             setLoading(false); // relies on the fact that meta is the slowest
                         };
                     })
@@ -213,6 +251,181 @@
                     })
                 }
             };
+
+            const handleGptRegenerate = (e) => {
+                setLoading(true);
+                setError(null);
+            
+                fetch('http://127.0.0.1:5000/api/gpt-regen', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(() => {
+                    let eventSourceGpt = new EventSource('http://127.0.0.1:5000/api/stream-results/gpt');
+                    eventSourceGpt.onmessage = (e) => {
+                        let temp = e.data;
+                        const jsonData = JSON.parse(temp.replace('data: ', ''))
+
+                        const title = jsonData["title"];
+                        const content = jsonData["content"].replace(/`/g, "\n");
+                        setAiResult(prevState => ({ ...prevState, gptTitle: title, gptResponse: content }));
+                        eventSourceGpt.close();
+                        setLoading(false);
+                    };
+                })
+                .catch(error => {
+                    console.error('Error calling GPT regeneration API:', error);
+                    setError(error.toString());
+                    setLoading(false);
+                });
+            }
+
+            const handleGptRegenerateTitle = (e) => {
+                setLoading(true);
+                setError(null);
+
+                fetch('http://127.0.0.1:5000/api/gpt-regen-title', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(aiResult)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === "Success") {
+                        setAiResult(prevState => ({ ...prevState, gptTitle: data.title }));
+                    } else {
+                        console.error('API returned error:', data.message);
+                        setError(data.message);
+                    }
+                    setLoading(false);
+                })
+                .catch(error => {
+                    console.error('Error calling GPT title regeneration API:', error);
+                    setError(error.toString());
+                    setLoading(false);
+                });
+            };
+            
+            const handleBardRegenerateTitle = (e) => {
+                setLoading(true);
+                setError(null);
+                
+                fetch('http://127.0.0.1:5000/api/bard-regen-title', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(aiResult)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === "Success") {
+                        setAiResult(prevState => ({ ...prevState, bardTitle: data.title }));
+                    } else {
+                        console.error('API returned error:', data.message);
+                        setError(data.message);
+                    }
+                    setLoading(false);
+                })
+                .catch(error => {
+                    console.error('Error calling Bard title regeneration API:', error);
+                    setError(error.toString());
+                    setLoading(false);
+                });
+            };
+
+            const handleMetaRegenerateTitle = (e) => {
+                setLoading(true);
+                setError(null);
+                
+                fetch('http://127.0.0.1:5000/api/meta-regen-title', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(aiResult)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === "Success") {
+                        setAiResult(prevState => ({ ...prevState, metaTitle: data.title }));
+                    } else {
+                        console.error('API returned error:', data.message);
+                        setError(data.message);
+                    }
+                    setLoading(false);
+                })
+                .catch(error => {
+                    console.error('Error calling Meta title regeneration API:', error);
+                    setError(error.toString());
+                    setLoading(false);
+                });
+            };
+
+            const handleBardRegenerate = (e) => {
+                setLoading(true);
+                setError(null);
+            
+                fetch('http://127.0.0.1:5000/api/bard-regen', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(() => {
+                    let eventSourceBard = new EventSource('http://127.0.0.1:5000/api/stream-results/bard');
+                    eventSourceBard.onmessage = (e) => {
+                        let temp = e.data;
+                        const jsonData = JSON.parse(temp.replace('data: ', ''))
+
+                        const title = jsonData["title"];
+                        const content = jsonData["content"].replace(/`/g, "\n");
+                        setAiResult(prevState => ({ ...prevState, bardTitle: title, bardResponse: content }));
+                        eventSourceBard.close();
+                        setLoading(false);
+                    };
+                })
+                .catch(error => {
+                    console.error('Error calling Bard regeneration API:', error);
+                    setError(error.toString());
+                    setLoading(false);
+                });
+            }
+
+            const handleMetaRegenerate = (e) => {
+                setLoading(true);
+                setError(null);
+            
+                fetch('http://127.0.0.1:5000/api/meta-regen', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(() => {
+                    let eventSourceMeta = new EventSource('http://127.0.0.1:5000/api/stream-results/meta');
+                    eventSourceMeta.onmessage = (e) => {
+                        let temp = e.data;
+                        const jsonData = JSON.parse(temp.replace('data: ', ''))
+
+                        const title = jsonData["title"];
+                        const content = jsonData["content"].replace(/`/g, "\n");
+                        setAiResult(prevState => ({ ...prevState, metaTitle: title, metaResponse: content }));
+                        eventSourceMeta.close();
+                        setLoading(false);
+                    };
+                })
+                .catch(error => {
+                    console.error('Error calling Meta regeneration API:', error);
+                    setError(error.toString());
+                    setLoading(false);
+                });
+            }    
+            
             
             const handleRegenerate = (type) => {
                 setLoading(true);
@@ -266,9 +479,13 @@
 
             return (
                 <div className="container mx-auto mt-8 p-4 bg-white shadow-md rounded-lg">
-                    <h1 className="text-2xl font-bold mb-4 text-center border-b-2 border-gray-300 pb-2">Rysun Ai Project - Omkar Patel</h1>
+                    <div class="text-center">
+                        <img src="https://www.rysun.com/wp-content/uploads/2023/07/rysun-logo-2.png" alt="Rysun Logo" class="mx-auto mb-4"></img>
+                        <h1 className="border-b-2 mb-4"></h1>
+                        {/*<h1 class="text-2xl font-bold mb-4 text-center border-b-2 border-gray-300 pb-2">Rysun Ai Project - Omkar Patel</h1>*/}
+                    </div>
 
-                    <div className="mt-4 text-center">
+                    {/*<div className="mt-4 text-center">
                         {serverStatus ? (
                             <div className="text-green-500 font-semibold">Server is connected.</div>
                         ) : (
@@ -282,18 +499,19 @@
                             </div>
                         )}
                     </div>
-                    <hr className="my-4" />
+                    <hr className="my-4" /> */}
 
                     <div className="flex">
                         <div className="w-1/4">
                             {/* Left-aligned section */}
                             <div className="bg-gray-200 p-4 rounded-lg">
-                                {/*
+                                
                                 <div className="mb-4 border-b-2 border-gray-300 pb-2">
                                     
-                                    {selectedModel && (
-                                        <h3 className="text-lg font-semibold text-center text-gray-700 font-semibold text-xs">Select Roleplay</h3>
+                                    {selectedRole && (
+                                        <h3 className="text-lg font-semibold text-center text-gray-700 font-semibold text-xs">Select Role</h3>
                                     )}
+                                    {/*
                                     <select
                                         className="bg-gray-300 text-gray-700 font-semibold py-2 px-2 rounded w-full"
                                         onChange={handleModelChange}
@@ -305,19 +523,38 @@
                                         <option value="Bard">Bard</option>
                                         <option value="Meta AI">Meta AI</option>
                                     </select>
+                                    */}
                                     <select
                                         className="bg-gray-300 text-gray-700 font-semibold py-2 px-2 rounded w-full"
-                                        onChange={handleModelChange}
-                                        value={selectedModel}
+                                        onChange={handleRoleChange}
+                                        value={selectedRole}
                                         disabled={!serverStatus}
                                     >
-                                        <option value="" disabled>Select Roleplay</option>
-                                        <option value="ChatGPT">Sales Manager</option>
-                                        <option value="Bard">Stock Expert</option>
-                                        <option value="Meta AI">Customer Support</option>
+                                        <option value="" disabled>Select Role</option>
+                                        <option value="Sales Executive">Sales Executive</option>
+                                        <option value="Software Engineer">Software Engineer</option>
+                                        <option value="Product Manager">Product Manager</option>
+                                        <option value="Customer Support Specialist">Customer Support Specialist</option>
+                                        <option value="Marketing Manager">Marketing Manager</option>
+                                        <option value="Human Resources Manager">Human Resources Manager</option>
+                                        <option value="Finance Analyst">Finance Analyst</option>
+                                        <option value="Operations Manager">Operations Manager</option>
+                                        <option value="Data Scientist">Data Scientist</option>
+                                        <option value="Graphic Designer">Graphic Designer</option>
+                                        <option value="Other">Other</option>
                                     </select>
+                                    {roleInfo && (
+                                        <textarea
+                                            value={roleInfo}
+                                            onChange={handleRoleInfoChange} 
+                                            className="block w-full mt-2 py-2 px-3 mb-1 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                            placeholder={roleInfo}
+                                            disabled={!serverStatus}
+                                            rows='4'
+                                        />
+                                        
+                                    )}
                                 </div>
-                                */}
                                 {/*
                                 <div className="mb-4">
                                     <p className="font-semibold">Choose Option</p>
@@ -456,12 +693,27 @@
                                         {loading ? '  Loading...  ' : 'Submit'}
                                     </button>
                                 </form>
+
+                                {serverStatus ? (
+                                    <div className="text-green-500 font-semibold text-center mt-2">Server is connected.</div>
+                                ) : (
+                                    
+                                    <div className="text-red-500 font-semibold text-center">
+                                        <div class="inline-block h-4 w-4 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status">
+                                            <span class="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]">Loading...</span>
+                                        </div>
+                                        &nbsp; Server is not connected. Retrying in {countdown} seconds.
+                                        <span id="time"></span>
+                                    </div>
+                                )}
                             </div>
                             {error && (
                                 <div className="bg-gray-200 p-4 rounded-lg mt-4">
                                     <p className="text-red-500 font-semibold text-center">{error}</p>
                                 </div>
                             )} 
+
+                            
                             
                             
                         </div>
@@ -469,35 +721,36 @@
                         <div className="w-1/4 ml-4 flex flex-col">
                             {/* Right-aligned section */}
                             {aiResult && (
-                            <div className="p-4 bg-white shadow-md rounded-lg w-full h-128 overflow-auto">
+                                <div className="p-4 bg-white shadow-md rounded-lg w-full h-128 overflow-auto">
                                     <div className="mt-4">
                                         <p><b>ChatGPT</b>:</p>
                                         <div className="mt-2 p-2 border border-gray-300 rounded">
+                                            {aiResult.gptTitle && <h2>{aiResult.gptTitle}</h2>}
                                             {aiResult.gptResponse ? (
                                                 <p className="whitespace-pre-wrap">{aiResult.gptResponse}</p>
                                             ): (
-                                                <div class="inline-block h-10 w-10 float-center animate-spin rounded-full border-4 border-solid border-gray-500 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status"></div>
+                                                <div className="inline-block h-10 w-10 float-center animate-spin rounded-full border-4 border-solid border-gray-500 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status"></div>
                                             )}
                                         </div>
                                         <div className="mt-4 flex justify-between">
                                             <button
-                                                onClick={() => handleRegenerate("title")}
-                                                className={loading || !serverStatus || error ? "mr-3 bg-gray-500 text-white font-bold py-2 px-4 rounded" : "mr-3 bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"}
+                                                onClick={handleGptRegenerate}
+                                                className={loading || !serverStatus || error ? "mr-3 bg-gray-500 text-white font-bold py-2 px-4 rounded" : "mr-3 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"}
                                                 disabled={loading || !serverStatus || error}
                                             >
-                                                {loading ? 'Loading...' : 'Regenerate Subject (buggy)'}
-
+                                                {loading ? 'Loading...' : 'Regenerate Response'}
                                             </button>
+                            
                                             <button
-                                                onClick={() => handleRegenerate("text")}
+                                                onClick={handleGptRegenerateTitle}
                                                 className={loading || !serverStatus || error ? "bg-gray-500 text-white font-bold py-2 px-4 rounded" : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"}
                                                 disabled={loading || !serverStatus || error}
                                             >
-                                                {loading ? 'Loading...' : 'Regenerate Text'}
+                                                {loading ? 'Loading...' : 'Regenerate Subject'}
                                             </button>
                                         </div>
 
-                                        <div className="flex items-center mt-2">
+                                        {/*<div className="flex items-center mt-2">
                                             <input
                                                 type="range"
                                                 className="flex-grow h-1.5 cursor-pointer appearance-none rounded-lg border-transparent bg-neutral-200"
@@ -520,7 +773,7 @@
                                             >
                                                 {loading ? 'Loading...' : 'Submit'}
                                             </button>
-                                        </div>
+                                        </div>*/}
                                     </div>
                                 </div>
                             )}
@@ -534,31 +787,32 @@
                                     <div className="mt-4">
                                         <p><b>Bard</b>:</p>
                                         <div className="mt-2 p-2 border border-gray-300 rounded">
+                                            {aiResult.bardTitle && <h2>{aiResult.bardTitle}</h2>}
                                             {aiResult.bardResponse ? (
                                                 <p className="whitespace-pre-wrap">{aiResult.bardResponse}</p>
                                             ): (
-                                                <div class="inline-block h-10 float-center w-10 animate-spin rounded-full border-4 border-solid border-gray-500 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status"></div>
+                                                <div className="inline-block h-10 w-10 float-center animate-spin rounded-full border-4 border-solid border-gray-500 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status"></div>
                                             )}
                                         </div>
                                         <div className="mt-4 flex justify-between">
                                             <button
-                                                onClick={() => handleRegenerate("title")}
-                                                className={loading || !serverStatus || error ? "mr-3 bg-gray-500 text-white font-bold py-2 px-4 rounded" : "mr-3 bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"}
+                                                onClick= {handleBardRegenerate}
+                                                className={loading || !serverStatus || error ? "mr-3 bg-gray-500 text-white font-bold py-2 px-4 rounded" : "mr-3 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"}
                                                 disabled={loading || !serverStatus || error}
                                             >
-                                                {loading ? 'Loading...' : 'Regenerate Subject (buggy)'}
+                                                {loading ? 'Loading...' : 'Regenerate Response'}
 
                                             </button>
                                             <button
-                                                onClick={() => handleRegenerate("text")}
+                                                onClick={handleBardRegenerateTitle}
                                                 className={loading || !serverStatus || error ? "bg-gray-500 text-white font-bold py-2 px-4 rounded" : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"}
                                                 disabled={loading || !serverStatus || error}
                                             >
-                                                {loading ? 'Loading...' : 'Regenerate Text'}
+                                                {loading ? 'Loading...' : 'Regenerate Subject'}
                                             </button>
                                         </div>
 
-                                        <div className="flex items-center mt-2">
+                                        {/* <div className="flex items-center mt-2">
                                             <input
                                                 type="range"
                                                 className="flex-grow h-1.5 cursor-pointer appearance-none rounded-lg border-transparent bg-neutral-200"
@@ -581,7 +835,7 @@
                                             >
                                                 {loading ? 'Loading...' : 'Submit'}
                                             </button>
-                                        </div>
+                                        </div> */}
                                     </div>
                                 </div>
                             )}
@@ -592,33 +846,37 @@
                             {aiResult && (
                             <div className="p-4 bg-white shadow-md rounded-lg w-full h-128 overflow-auto">
                                     <div className="mt-4">
-                                        <p><b>MetaAI</b>:</p>
+                                        <p><b>Meta</b>:</p>
                                         <div className="mt-2 p-2 border border-gray-300 rounded">
+                                            {aiResult.metaTitle && <h2>{aiResult.metaTitle}</h2>}
+                                            {aiResult.metaTitle && aiResult.metaResponse && (
+                                                <br></br>
+                                            )}
                                             {aiResult.metaResponse ? (
                                                 <p className="whitespace-pre-wrap">{aiResult.metaResponse}</p>
                                             ): (
-                                                <div class="inline-block h-10 float-center w-10 animate-spin rounded-full border-4 border-solid border-gray-500 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status"></div>
+                                                <div className="inline-block h-10 w-10 float-center animate-spin rounded-full border-4 border-solid border-gray-500 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status"></div>
                                             )}
                                         </div>
                                         <div className="mt-4 flex justify-between">
                                             <button
-                                                onClick={() => handleRegenerate("title")}
-                                                className={loading || !serverStatus || error ? "mr-3 bg-gray-500 text-white font-bold py-2 px-4 rounded" : "mr-3 bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"}
+                                                onClick={handleMetaRegenerate}
+                                                className={loading || !serverStatus || error ? "mr-3 bg-gray-500 text-white font-bold py-2 px-4 rounded" : "mr-3 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"}
                                                 disabled={loading || !serverStatus || error}
                                             >
-                                                {loading ? 'Loading...' : 'Regenerate Subject (buggy)'}
+                                                {loading ? 'Loading...' : 'Regenerate Response'}
 
                                             </button>
                                             <button
-                                                onClick={() => handleRegenerate("text")}
+                                                onClick={handleMetaRegenerateTitle}
                                                 className={loading || !serverStatus || error ? "bg-gray-500 text-white font-bold py-2 px-4 rounded" : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"}
                                                 disabled={loading || !serverStatus || error}
                                             >
-                                                {loading ? 'Loading...' : 'Regenerate Text'}
+                                                {loading ? 'Loading...' : 'Regenerate Subject'}
                                             </button>
                                         </div>
 
-                                        <div className="flex items-center mt-2">
+                                        {/* <div className="flex items-center mt-2">
                                             <input
                                                 type="range"
                                                 className="flex-grow h-1.5 cursor-pointer appearance-none rounded-lg border-transparent bg-neutral-200"
@@ -641,7 +899,7 @@
                                             >
                                                 {loading ? 'Loading...' : 'Submit'}
                                             </button>
-                                        </div>
+                                        </div> */}
                                         
                                     </div>
                                 </div>
