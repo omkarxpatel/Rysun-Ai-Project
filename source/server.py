@@ -36,7 +36,7 @@ import os
 import threading
 import time
 
-from constants import PROMPT_INFO, META_SPECIAL, DEFAULT_VALUES, ROLE_VALUES, PRECON, REGEN_TITLE
+from screens.email.constants import PROMPT_INFO, META_SPECIAL, DEFAULT_VALUES, ROLE_VALUES, PRECON, REGEN_TITLE
 
 # Load environment variables
 load_dotenv()
