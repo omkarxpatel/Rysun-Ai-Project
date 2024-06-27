@@ -1,7 +1,7 @@
 ![alt text](../images/rysun_logo.png) 
 <!-- <img src="https://www.rysun.com/wp-content/uploads/2023/07/rysun-logo-2.png" alt="Rysun" width="100"> -->
 # Future Implementations
-##### Estimated Timeline: 6/27/2024 - 6/28/2024
+##### Estimated Timeline: 6/27/2024 - 6/30/2024
 ## Rewrite the System to be Modular
 
 ### Objective:
