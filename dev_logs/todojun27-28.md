@@ -1,6 +1,6 @@
 ![alt text](../images/rysun_logo.png) 
 <!-- <img src="https://www.rysun.com/wp-content/uploads/2023/07/rysun-logo-2.png" alt="Rysun" width="100"> -->
-# Future Implementations
+### Omkar Patel
 ##### Estimated Timeline: 6/27/2024 - 6/30/2024
 ## Rewrite the System to be Modular
 
@@ -14,13 +14,15 @@ The project will be organized into multiple subfolders for different tasks, such
 src
     ├── main.py         // Main runner for everything, runs functions in server and loads HTML
     ├── server.py       // Server with backend functions
-email
-    ├── index.html
-    ├── config.py
-coding
-    ├── index.html
-    ├── config.py
-... // Other outlines
+screens
+    ├── email
+       ├── index.html
+       ├── config.py
+    ├── coding
+       ├── index.html
+       ├── config.py
+
+... // Other outlines & folders
 requirements.txt
 .env
 .gitignore
