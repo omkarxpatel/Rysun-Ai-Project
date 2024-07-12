@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rysun Ai Project - Omkar Patel</title>
+    <link rel="shortcut icon" href="https://intranet.rysun.com/assets/images/favicon.png" />
+
+    <!-- tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/babel-standalone/babel.min.js"></script>
+    <script src="script.js"></script>
+</head>
+
+<body class="bg-gray-100">
+    <div id="root"></div>
+    <script type="text/babel">
+        function App() {
+            const [promptValue, setPromptValue] = React.useState("");
+            const [noteValue, setNoteValue] = React.useState("");
+            const [keywordValue, setKeywordValue] = React.useState("");
+            const [selectedModel, setSelectedModel] = React.useState("");
+            const [selectedTone, setSelectedTone] = React.useState("");
+            const [selectedStyle, setSelectedStyle] = React.useState("");
+            const [selectedLength, setSelectedLength] = React.useState("");
+            const [selectedComplexity, setSelectedComplexity] = React.useState("");
+            const [selectedOption, setSelectedOption] = React.useState("");
+            const [selectedRole, setSelectedRole] = React.useState("");
+            const [roleInfo, setRoleInfo] = React.useState("");
+
+            const [aiResult, setAiResult] = React.useState("");
+            const [gptScore, setGptScore] = React.useState(2);
+            const [metaScore, setMetaScore] = React.useState(2);
+            const [bardScore, setBardScore] = React.useState(2);
+
+            const [lastPrompt, setLastPrompt] = React.useState("");
+            const [lastModel, setLastModel] = React.useState("");
+
+            const [error, setError] = React.useState(null);
+            const [loading, setLoading] = React.useState(false);
+            const [serverStatus, setServerStatus] = React.useState(false);
+            const [countdown, setCountdown] = React.useState(5);
+
+            const [count, setCount] = React.useState(0);
+
+            React.useEffect(() => {
+                const checkServerStatus = () => {
+                    fetch("http://127.0.0.1:5000/api/status", {
+                        method: "GET",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "sessionId": sessionStorage.getItem('sessionId'),
+                        },
+                    })
+                    .then((response) => {
+                        if (response.ok) {
+                            setServerStatus(true);
+                    
+                            if (count === 0) {
+                                setCount(1);
+                                setError(null);
+                            }
+                    
+                            setCountdown(5); // Reset the countdown when server is connected
+                        } else {
+                            setCount(0);
+                            setServerStatus(false);
+                            setError("Server is not connected");
+                        }
+                    })
+                    .catch((error) => {
+                        setServerStatus(false);
+                        setError("Server is not connected");
+                        console.error("Error checking server status:", error);
+                    });
+                    
+                };
+
+                const intervalId = setInterval(() => {
+                    setCountdown((prevCountdown) => {
+                        if (prevCountdown === 1) {
+                            checkServerStatus();
+                            return 5; // Reset countdown after checking server status
+                        }
+                        return prevCountdown - 1;
+                    });
+                }, 1000);
+
+                checkServerStatus(); // Initial check
+
+                const generateSessionId = async () => {
+                    try {
+                        const response = await fetch(
+                            "http://localhost:5000/api/create_session",
+                            {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                },
+                            }
+                        );
+                        const data = await response.json();
+                        const newSessionId = data.sessionId;
+                        sessionStorage.setItem("sessionId", newSessionId);
+                        console.log(`Session ID created and stored: ${newSessionId}`);
+                    } catch (error) {
+                        console.error("Error creating session:", error);
+                    }
+                };
+
+                generateSessionId();
+
+
+                return () => clearInterval(intervalId);
+            }, []);
+
+
+            const fetchSessionInfo = async () => {
+                const sessionId = sessionStorage.getItem('sessionId');
+                if (sessionId) {
+                    try {
+                        const response = await fetch('http://localhost:5000/api/session_info', {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'sessionId': sessionId,
+                            },
+                        });
+                        const data = await response.json();
+                        console.log('Session Info:', data);
+                    } catch (error) {
+                        console.error('Error fetching session info:', error);
+                    }
+                } else {
+                    console.error('No session ID found in session storage');
+                }
+            };
+
+            const handleModelChange = (e) => {
+                const selectedValue = e.target.value;
+
+                fetch("http://127.0.0.1:5000/api/model-dropdown-selected", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "sessionId": sessionStorage.getItem('sessionId'),
+                    },
+                    
+                    
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        setAiResult("");
+                        setError(null);
+                        setSelectedModel(data.model);
+                        console.log("Dropdown selection response:", data);
+                    })
+                    .catch((error) =>
+                        console.error("Error calling dropdown selection API:", error)
+                    );
+            };
+
+            const handleRoleChange = (e) => {
+                const selectedValue = e.target.value;
+
+                fetch("http://127.0.0.1:5000/api/role-dropdown-selected", {
+                    method: "POST",
+                    headers: {
+                            "sessionId": sessionStorage.getItem('sessionId'),
+                            "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ selectedOption: selectedValue }),
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        setSelectedRole(data.role);
+                        setRoleInfo(data.info);
+                        console.log("Dropdown selection response:", data);
+                    })
+                    .catch((error) =>
+                        console.error("Error calling dropdown selection API:", error)
+                    );
+            };
+
+            const handleSelectionChange = (setter) => (e) => {
+                const selectedValue = e.target.value;
+                setter(selectedValue);
+                setError(null);
+                setLastPrompt("");
+
+                fetch("http://127.0.0.1:5000/api/selection-choice", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "sessionId": sessionStorage.getItem('sessionId'),
+                    },
+                    body: JSON.stringify({ selectedOption: selectedValue }),
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        console.log(data);
+                    })
+                    .catch((error) =>
+                        console.error("Error calling dropdown selection API:", error)
+                    );
+            };
+
+            const handlePromptChange = (e) => {
+                setPromptValue(e.target.value);
+
+                if (error) {
+                    setError(null);
+                }
+            };
+
+            const handleParameterizedPromptChange = (e) => {
+                setParameterizedPromptChange(e.target.value);
+            };
+
+            const handleRoleInfoChange = (e) => {
+                setRoleInfo(e.target.value);
+            };
+
+            const handleSliderChangeG = (event) => {
+                setGptScore(event.target.value);
+            };
+            const handleSliderChangeM = (event) => {
+                setMetaScore(event.target.value);
+            };
+            const handleSliderChangeB = (event) => {
+                setBardScore(event.target.value);
+            };
+
+            const handleNoteChange = (e) => {
+                setNoteValue(e.target.value);
+                setError(null);
+                setLastPrompt("");
+            };
+
+            const handleKeywordChange = (e) => {
+                setKeywordValue(e.target.value);
+                setError(null);
+                setLastPrompt("");
+            };
+            const handlePromptSubmit = (e) => {
+                e.preventDefault();
+                console.log("Form submitted with user input:", promptValue);
+            
+                if (promptValue === "") {
+                    setError("Please enter a prompt");
+                } else if (promptValue === lastPrompt && selectedModel === lastModel) {
+                    setError("Please enter a new prompt or change models");
+                } else {
+                    console.log(promptValue);
+                    setLoading(true);
+                    setLastModel(selectedModel);
+                    setLastPrompt(promptValue);
+                    setError(null);
+                    setAiResult({
+                        gptResponse: "",
+                        bardResponse: "",
+                        metaResponse: "",
+                    });
+            
+                    const sessionId = sessionStorage.getItem('sessionId'); // Retrieve session ID from storage
+            
+                    fetch("http://127.0.0.1:5000/api/prompt-submission-email", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "sessionId": sessionId, // Include the session ID in the headers
+                        },
+                        body: JSON.stringify({
+                            prompt: promptValue,
+                            model: selectedModel,
+                            notes: noteValue,
+                            keywords: keywordValue,
+                            role: roleInfo,
+                        }),
+                    })
+                    .then(async (response) => {
+                        if (!response.ok) {
+                            throw new Error("Failed to submit prompt");
+                        }
+            
+                        // Cleanup previous EventSource instances if any
+                        if (window.eventSourceGpt) {
+                            window.eventSourceGpt.close();
+                            window.eventSourceGpt = null;
+                        }
+                        if (window.eventSourceBard) {
+                            window.eventSourceBard.close();
+                            window.eventSourceBard = null;
+                        }
+                        if (window.eventSourceMeta) {
+                            window.eventSourceMeta.close();
+                            window.eventSourceMeta = null;
+                        }
+            
+                        // Initialize EventSource with sessionId in the request headers
+                        window.eventSourceGpt = new EventSource(
+                            `http://127.0.0.1:5000/api/stream-results/gpt?sessionId=${encodeURIComponent(sessionId)}`
+                        );
+                        window.eventSourceGpt.onmessage = (e) => {
+                            let temp = e.data;
+                            const jsonData = JSON.parse(temp.replace("data: ", ""));
+            
+                            const title = jsonData["title"];
+                            const content = jsonData["content"].replace(/`/g, "\n");
+                            setAiResult((prevState) => ({
+                                ...prevState,
+                                gptTitle: title,
+                                gptResponse: content,
+                            }));
+                        };
+            
+                        window.eventSourceBard = new EventSource(
+                            `http://127.0.0.1:5000/api/stream-results/bard?sessionId=${encodeURIComponent(sessionId)}`
+                        );
+                        window.eventSourceBard.onmessage = (e) => {
+                            let temp = e.data;
+                            const jsonData = JSON.parse(temp.replace("data: ", ""));
+            
+                            const title = jsonData["title"];
+                            const content = jsonData["content"].replace(/`/g, "\n");
+                            setAiResult((prevState) => ({
+                                ...prevState,
+                                bardTitle: title,
+                                bardResponse: content,
+                            }));
+                        };
+            
+                        window.eventSourceMeta = new EventSource(
+                            `http://127.0.0.1:5000/api/stream-results/meta?sessionId=${encodeURIComponent(sessionId)}`
+                        );
+                        window.eventSourceMeta.onmessage = (e) => {
+                            let temp = e.data;
+                            const jsonData = JSON.parse(temp.replace("data: ", ""));
+            
+                            const title = jsonData["title"];
+                            const content = jsonData["content"].replace(/`/g, "\n\n");
+                            setAiResult((prevState) => ({
+                                ...prevState,
+                                metaTitle: title,
+                                metaResponse: content,
+                            }));
+                            // Close the meta EventSource as it is the slowest
+                            window.eventSourceMeta.close();
+                            setLoading(false);
+                        };
+            
+                        window.eventSourceMeta.onerror = () => {
+                            setLoading(false);
+                        };
+            
+                    })
+                    .catch((error) => {
+                        console.error("Error calling prompt submission API:", error);
+                        setError(error.toString());
+                        setLoading(false);
+                    });
+                }
+            };
+            
+            
+
+            const handleGptRegenerateTitle = (e) => {
+                setLoading(true);
+                setError(null);
+
+                fetch("http://127.0.0.1:5000/api/gpt-regen-title", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "sessionId": sessionStorage.getItem('sessionId'),
+                    },
+                    body: JSON.stringify(aiResult),
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        if (data.status === "Success") {
+                            setAiResult((prevState) => ({
+                                ...prevState,
+                                gptTitle: data.title,
+                            }));
+                        } else {
+                            console.error("API returned error:", data.message);
+                            setError(data.message);
+                        }
+                        setLoading(false);
+                    })
+                    .catch((error) => {
+                        console.error("Error calling GPT title regeneration API:", error);
+                        setError(error.toString());
+                        setLoading(false);
+                    });
+            };
+
+            const handleBardRegenerateTitle = (e) => {
+                setLoading(true);
+                setError(null);
+
+                fetch("http://127.0.0.1:5000/api/bard-regen-title", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "sessionId": sessionStorage.getItem('sessionId'),
+                    },
+                    body: JSON.stringify(aiResult),
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        if (data.status === "Success") {
+                            setAiResult((prevState) => ({
+                                ...prevState,
+                                bardTitle: data.title,
+                            }));
+                        } else {
+                            console.error("API returned error:", data.message);
+                            setError(data.message);
+                        }
+                        setLoading(false);
+                    })
+                    .catch((error) => {
+                        console.error(
+                            "Error calling Bard title regeneration API:",
+                            error
+                        );
+                        setError(error.toString());
+                        setLoading(false);
+                    });
+            };
+
+            const handleMetaRegenerateTitle = (e) => {
+                setLoading(true);
+                setError(null);
+
+                fetch("http://127.0.0.1:5000/api/meta-regen-title", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "sessionId": sessionStorage.getItem('sessionId'),
+                    },
+                    body: JSON.stringify(aiResult),
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        if (data.status === "Success") {
+                            setAiResult((prevState) => ({
+                                ...prevState,
+                                metaTitle: data.title,
+                            }));
+                        } else {
+                            console.error("API returned error:", data.message);
+                            setError(data.message);
+                        }
+                        setLoading(false);
+                    })
+                    .catch((error) => {
+                        console.error(
+                            "Error calling Meta title regeneration API:",
+                            error
+                        );
+                        setError(error.toString());
+                        setLoading(false);
+                    });
+            };
+
+
+            const handleGptRegenerate = (e) => {
+                setLoading(true);
+                setError(null);
+                const sessionId = sessionStorage.getItem('sessionId')
+
+                fetch("http://127.0.0.1:5000/api/gpt-regen", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "sessionId": sessionStorage.getItem('sessionId'),
+                    },
+                })
+                    .then(() => {
+                        let eventSourceGpt = new EventSource(
+                            `http://127.0.0.1:5000/api/stream-results/gpt?sessionId=${encodeURIComponent(sessionId)}`
+                        );
+                        eventSourceGpt.onmessage = (e) => {
+                            let temp = e.data;
+                            const jsonData = JSON.parse(temp.replace("data: ", ""));
+
+                            const title = jsonData["title"];
+                            const content = jsonData["content"].replace(/`/g, "\n");
+                            setAiResult((prevState) => ({
+                                ...prevState,
+                                gptTitle: title,
+                                gptResponse: content,
+                            }));
+                            eventSourceGpt.close();
+                            setLoading(false);
+                        };
+                    })
+                    .catch((error) => {
+                        console.error("Error calling GPT regeneration API:", error);
+                        setError(error.toString());
+                        setLoading(false);
+                    });
+            };
+
+            
+            const handleBardRegenerate = (e) => {
+                setLoading(true);
+                setError(null);
+                const sessionId = sessionStorage.getItem('sessionId')
+
+                fetch("http://127.0.0.1:5000/api/bard-regen", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "sessionId": sessionStorage.getItem('sessionId'),
+                    },
+                })
+                    .then(() => {
+                        let eventSourceBard = new EventSource(
+                            `http://127.0.0.1:5000/api/stream-results/bard?sessionId=${encodeURIComponent(sessionId)}`
+                        );
+                        eventSourceBard.onmessage = (e) => {
+                            let temp = e.data;
+                            const jsonData = JSON.parse(temp.replace("data: ", ""));
+
+                            const title = jsonData["title"];
+                            const content = jsonData["content"].replace(/`/g, "\n");
+                            setAiResult((prevState) => ({
+                                ...prevState,
+                                bardTitle: title,
+                                bardResponse: content,
+                            }));
+                            eventSourceBard.close();
+                            setLoading(false);
+                        };
+                    })
+                    .catch((error) => {
+                        console.error("Error calling Bard regeneration API:", error);
+                        setError(error.toString());
+                        setLoading(false);
+                    });
+            };
+
+            const handleMetaRegenerate = (e) => {
+                setLoading(true);
+                setError(null);
+                const sessionId = sessionStorage.getItem('sessionId')
+
+                fetch("http://127.0.0.1:5000/api/meta-regen", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "sessionId": sessionStorage.getItem('sessionId'),
+                    },
+                })
+                    .then(() => {
+                        let eventSourceMeta = new EventSource(
+                            `http://127.0.0.1:5000/api/stream-results/meta?sessionId=${encodeURIComponent(sessionId)}`
+                        );
+                        eventSourceMeta.onmessage = (e) => {
+                            let temp = e.data;
+                            const jsonData = JSON.parse(temp.replace("data: ", ""));
+
+                            const title = jsonData["title"];
+                            const content = jsonData["content"].replace(/`/g, "\n");
+                            setAiResult((prevState) => ({
+                                ...prevState,
+                                metaTitle: title,
+                                metaResponse: content,
+                            }));
+                            eventSourceMeta.close();
+                            setLoading(false);
+                        };
+                    })
+                    .catch((error) => {
+                        console.error("Error calling Meta regeneration API:", error);
+                        setError(error.toString());
+                        setLoading(false);
+                    });
+            };
+
+            const handleRegenerate = (type) => {
+                setLoading(true);
+                setError(null);
+
+                const promptType =
+                    type === "title"
+                        ? "Regenerate Title of this email but keep the text the exact same" +
+                        aiResult
+                        : "Regenerate Text of this email but keep the title the exact same" +
+                        aiResult;
+                const prompt = `${promptValue} -- ${promptType}`;
+
+                fetch("http://127.0.0.1:5000/api/prompt-submission", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "sessionId": sessionStorage.getItem('sessionId'),
+                    },
+                    body: JSON.stringify({
+                        prompt,
+                        model: selectedModel,
+                        notes: noteValue,
+                        keywords: keywordValue,
+                    }),
+                })
+                    .then((response) => response.json())
+                    .then((responseData) => {
+                        if (responseData.response === "Please select a model")
+                            setError("Please select a model");
+                        else if (responseData.response.substring(0, 6) === "Error:")
+                            setError(responseData.response);
+                        else setAiResult(responseData);
+                        console.log("API response:", responseData);
+                    })
+                    .catch((error) => {
+                        console.error("Error calling prompt submission API:", error);
+                        setError(error.toString());
+                    })
+                    .finally(() => {
+                        setLoading(false);
+                    });
+            };
+
+            const handleOptionChange = (e) => {
+                setSelectedOption(e.target.value);
+                setError(null);
+                setLastPrompt("");
+
+                fetch("http://127.0.0.1:5000/api/selection-choice", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "sessionId": sessionStorage.getItem('sessionId'),
+                    },
+                    body: JSON.stringify({ selectedOption: e.target.value }),
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        console.log(data);
+                    })
+                    .catch((error) =>
+                        console.error("Error calling selection choice API:", error)
+                    );
+            };
+
+            return (
+                <div className="container mx-auto mt-8 p-4 bg-white shadow-md rounded-lg">
+                    <div class="text-center">
+                        <img
+                            src="https://www.rysun.com/wp-content/uploads/2023/07/rysun-logo-2.png"
+                            alt="Rysun Logo"
+                            class="mx-auto mb-4"
+                        ></img>
+                        <h1 class="text-2xl mb-4 text-center border-b-2 border-gray-300 pb-2">
+                            Email Generation
+                        </h1>
+                        {/*<h1 class="text-2xl font-bold mb-4 text-center border-b-2 border-gray-300 pb-2">Rysun Ai Project - Omkar Patel</h1>*/}
+                    </div>
+
+                    {/*<div className="mt-4 text-center">
+                        {serverStatus ? (
+                            <div className="text-green-500 font-semibold">Server is connected.</div>
+                        ) : (
+                            
+                            <div className="text-red-500 font-semibold">
+                                <div class="inline-block h-4 w-4 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status">
+                                    <span class="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]">Loading...</span>
+                                </div>
+                                &nbsp; Server is not connected. Retrying in {countdown} seconds.
+                                <span id="time"></span>
+                            </div>
+                        )}
+                    </div>
+                    <hr className="my-4" /> */}
+
+                    <div className="flex">
+                        <div className="w-1/4">
+                            {/* Left-aligned section */}
+                            <div className="bg-gray-200 p-4 rounded-lg">
+                                <div className="mb-4 border-b-2 border-gray-300 pb-2">
+                                    {selectedRole && (
+                                        <h3 className="text-lg font-semibold text-center text-gray-700 font-semibold text-xs">
+                                            Select Role
+                                        </h3>
+                                    )}
+                                    {/*
+                                    <select
+                                        className="bg-gray-300 text-gray-700 font-semibold py-2 px-2 rounded w-full"
+                                        onChange={handleModelChange}
+                                        value={selectedModel}
+                                        disabled={!serverStatus}
+                                    >
+                                        <option value="" disabled>Select your AI model</option>
+                                        <option value="ChatGPT">ChatGPT</option>
+                                        <option value="Bard">Bard</option>
+                                        <option value="Meta AI">Meta AI</option>
+                                    </select>
+                                    */}
+                                    <select
+                                        className="bg-gray-300 text-gray-700 font-semibold py-2 px-2 rounded w-full"
+                                        onChange={handleRoleChange}
+                                        value={selectedRole}
+                                        disabled={!serverStatus}
+                                    >
+                                        <option value="" disabled>
+                                            Select Role
+                                        </option>
+                                        <option value="Sales Executive">Sales Executive</option>
+                                        <option value="Software Engineer">
+                                            Software Engineer
+                                        </option>
+                                        <option value="Product Manager">Product Manager</option>
+                                        <option value="Customer Support Specialist">
+                                            Customer Support Specialist
+                                        </option>
+                                        <option value="Marketing Manager">
+                                            Marketing Manager
+                                        </option>
+                                        <option value="Human Resources Manager">
+                                            Human Resources Manager
+                                        </option>
+                                        <option value="Finance Analyst">Finance Analyst</option>
+                                        <option value="Operations Manager">
+                                            Operations Manager
+                                        </option>
+                                        <option value="Data Scientist">Data Scientist</option>
+                                        <option value="Graphic Designer">Graphic Designer</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                    {roleInfo && (
+                                        <textarea
+                                            value={roleInfo}
+                                            onChange={handleRoleInfoChange}
+                                            className="block w-full mt-2 py-2 px-3 mb-1 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                            placeholder={roleInfo}
+                                            disabled={!serverStatus}
+                                            rows="4"
+                                        />
+                                    )}
+                                </div>
+                                {/*
+                                <div className="mb-4">
+                                    <p className="font-semibold">Choose Option</p>
+                                    <div className="flex items-center mb-2">
+                                        <input
+                                            type="radio"
+                                            id="option1"
+                                            name="option"
+                                            value="Option1"
+                                            className="mr-2"
+                                            onChange={handleOptionChange}
+                                            disabled={!serverStatus}
+                                        />
+                                        <label htmlFor="option1" className="text-gray-700">Option 1</label>
+                                    </div>
+                                    <div className="flex items-center">
+                                        <input
+                                            type="radio"
+                                            id="option2"
+                                            name="option"
+                                            value="Option2"
+                                            className="mr-2"
+                                            onChange={handleOptionChange}
+                                            disabled={!serverStatus}
+                                        />
+                                        <label htmlFor="option2" className="text-gray-700">Option 2</label>
+                                    </div>
+                                    
+                                </div> */}
+
+                                {/* Textbox and Submit Button */}
+                                <form onSubmit={handlePromptSubmit}>
+                                    {promptValue && (
+                                        <h5 className="text-gray-700 font-semibold text-xs">
+                                            Theme/Summary
+                                        </h5>
+                                    )}
+                                    <textarea
+                                        value={promptValue}
+                                        onChange={handlePromptChange}
+                                        className="block w-full py-2 mb-1 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                        placeholder="Email Theme/Summary"
+                                        disabled={!serverStatus}
+                                        rows="3"
+                                    />
+
+                                    {noteValue && (
+                                        <h5 className="text-gray-700 font-semibold text-xs">
+                                            Notes
+                                        </h5>
+                                    )}
+                                    <textarea
+                                        value={noteValue}
+                                        onChange={handleNoteChange}
+                                        className="block w-full py-2 px-3 mb-1 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                        placeholder="Notes"
+                                        disabled={!serverStatus}
+                                        rows="1"
+                                    />
+
+                                    {keywordValue && (
+                                        <h5 className="text-gray-700 font-semibold text-xs">
+                                            Keywords
+                                        </h5>
+                                    )}
+                                    <textarea
+                                        value={keywordValue}
+                                        onChange={handleKeywordChange}
+                                        className="block w-full py-2 px-3 mb-1 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                        placeholder="Keywords"
+                                        disabled={!serverStatus}
+                                        rows="1"
+                                    />
+
+                                    <h5 className="text-gray-700 font-semibold text-xs">
+                                        Tone
+                                    </h5>
+                                    <select
+                                        className="bg-gray-300 text-gray-700 mb-1 font-semibold py-2 px-2 rounded w-full"
+                                        onChange={handleSelectionChange(setSelectedTone)}
+                                        value={selectedTone}
+                                        disabled={!serverStatus}
+                                    >
+                                        <option value="Tone of email: Casual">Casual</option>
+                                        <option value="Tone of email: Informal">Informal</option>
+                                        <option value="Tone of email: Friendly">Friendly</option>
+                                        <option value="Tone of email: Formal">Formal</option>
+                                        <option value="Tone of email: Professional">
+                                            Professional
+                                        </option>
+                                    </select>
+
+                                    <h5 className="text-gray-700 font-semibold text-xs">
+                                        Style
+                                    </h5>
+                                    <select
+                                        className="bg-gray-300 text-gray-700 mb-1 font-semibold py-2 px-2 rounded w-full"
+                                        onChange={handleSelectionChange(setSelectedStyle)}
+                                        value={selectedStyle}
+                                        disabled={!serverStatus}
+                                    >
+                                        <option value="Style of email: Concise">Concise</option>
+                                        <option value="Style of email: Neutral">Neutral</option>
+                                        <option value="Style of email: Polite">Polite</option>
+                                        <option value="Style of email: Persuasive">
+                                            Persuasive
+                                        </option>
+                                    </select>
+
+                                    <h5 className="text-gray-700 font-semibold text-xs">
+                                        Length
+                                    </h5>
+                                    <select
+                                        className="bg-gray-300 text-gray-700 mb-1 font-semibold py-2 px-2 rounded w-full"
+                                        onChange={handleSelectionChange(setSelectedLength)}
+                                        value={selectedLength}
+                                        disabled={!serverStatus}
+                                    >
+                                        <option value="Length of email: Short">Short</option>
+                                        <option value="Length of email: Medium">Medium</option>
+                                        <option value="Length of email: Long">Long</option>
+                                    </select>
+
+                                    <h5 className="text-gray-700 font-semibold text-xs">
+                                        Complexity
+                                    </h5>
+                                    <select
+                                        className="bg-gray-300 text-gray-700 font-semibold py-2 px-2 rounded w-full"
+                                        onChange={handleSelectionChange(setSelectedComplexity)}
+                                        value={selectedComplexity}
+                                        disabled={!serverStatus}
+                                    >
+                                        <option value="Complexity of email: Simple">
+                                            Simple
+                                        </option>
+                                        <option value="Complexity of email: Moderate">
+                                            Moderate
+                                        </option>
+                                        <option value="Complexity of email: Detailed">
+                                            Detailed
+                                        </option>
+                                    </select>
+                                    {/*<textarea
+                                        value={parameterizedPromptValue}
+                                        onChange={handleParameterizedPromptChange}
+                                        className="block w-full mt-2 py-2 mb-1 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                        disabled={!serverStatus}
+                                        rows="10"
+                                    />*/}
+                                    <button
+                                        type="submit"
+                                        className={
+                                            loading || !serverStatus || error
+                                                ? "mt-2 bg-gray-500 text-white font-bold py-2 px-4 w-full rounded"
+                                                : "mt-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 w-full rounded"
+                                        }
+                                        disabled={loading || !serverStatus || error}
+                                    >
+                                        {loading && (
+                                            <div
+                                                class="inline-block h-4 w-4 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
+                                                role="status"
+                                            >
+                                                <span class="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]">
+                                                    &nbsp;Loading...
+                                                </span>
+                                            </div>
+                                        )}
+                                        {loading ? "  Loading...  " : "Submit"}
+                                    </button>
+                                </form>
+
+                                {serverStatus ? (
+                                    <div className="text-green-500 font-semibold text-center mt-2">
+                                        Server is connected.
+                                    </div>
+                                ) : (
+                                    <div className="text-red-500 font-semibold text-center">
+                                        <div
+                                            class="inline-block h-4 w-4 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
+                                            role="status"
+                                        >
+                                            <span class="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]">
+                                                Loading...
+                                            </span>
+                                        </div>
+                                        &nbsp; Server is not connected<br></br>Retrying in{" "}
+                                        {countdown} seconds.
+                                        <span id="time"></span>
+                                    </div>
+                                )}
+                            </div>
+                            {error && (
+                                <div className="bg-gray-200 p-4 rounded-lg mt-4">
+                                    <p className="text-red-500 font-semibold text-center">
+                                        {error}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="w-1/4 ml-4 flex flex-col">
+                            {/* Right-aligned section */}
+                            {aiResult && (
+                                <div className="p-4 bg-white shadow-md rounded-lg w-full h-128 overflow-auto">
+                                    <div className="mt-4">
+                                        <p>
+                                            <b>ChatGPT</b>:
+                                        </p>
+                                        <div className="mt-2 p-2 border border-gray-300 rounded">
+                                            {aiResult.gptTitle && <h2>{aiResult.gptTitle}</h2>}
+                                            {aiResult.gptResponse ? (
+                                                <p className="whitespace-pre-wrap">
+                                                    {aiResult.gptResponse}
+                                                </p>
+                                            ) : (
+                                                <div
+                                                    className="inline-block h-10 w-10 float-center animate-spin rounded-full border-4 border-solid border-gray-500 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
+                                                    role="status"
+                                                ></div>
+                                            )}
+                                        </div>
+                                        <div className="mt-4 flex justify-between">
+                                            <button
+                                                onClick={handleGptRegenerate}
+                                                className={
+                                                    loading || !serverStatus || error
+                                                        ? "mr-3 bg-gray-500 text-white font-bold py-2 px-4 rounded"
+                                                        : "mr-3 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                                                }
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? "Loading..." : "Regenerate Response"}
+                                            </button>
+
+                                            <button
+                                                onClick={handleGptRegenerateTitle}
+                                                className={
+                                                    loading || !serverStatus || error
+                                                        ? "bg-gray-500 text-white font-bold py-2 px-4 rounded"
+                                                        : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                                                }
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? "Loading..." : "Regenerate Subject"}
+                                            </button>
+                                        </div>
+
+                                        {/*<div className="flex items-center mt-2">
+                                            <input
+                                                type="range"
+                                                className="flex-grow h-1.5 cursor-pointer appearance-none rounded-lg border-transparent bg-neutral-200"
+                                                min="1"
+                                                max="3"
+                                                id="customRange2"
+                                                value={gptScore}
+                                                onChange={handleSliderChangeG}
+                                            />
+                                            <button
+                                                className="bg-gray-500 text-white font-bold py-2 px-4 rounded ml-2"
+                                                disabled
+                                            >
+                                                {gptScore}
+                                            </button>
+                                            <button
+                                                onClick={() => handleRegenerate("text")}
+                                                className={loading || !serverStatus || error ? "bg-gray-500 text-white font-bold py-2 px-4 rounded ml-2" : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-2"}
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? 'Loading...' : 'Submit'}
+                                            </button>
+                                        </div>*/}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="w-1/4 ml-4 flex flex-col">
+                            {/* Right-aligned section */}
+                            {aiResult && (
+                                <div className="p-4 bg-white shadow-md rounded-lg w-full h-128 overflow-auto">
+                                    <div className="mt-4">
+                                        <p>
+                                            <b>Bard</b>:
+                                        </p>
+                                        <div className="mt-2 p-2 border border-gray-300 rounded">
+                                            {aiResult.bardTitle && <h2>{aiResult.bardTitle}</h2>}
+                                            {aiResult.bardResponse ? (
+                                                <p className="whitespace-pre-wrap">
+                                                    {aiResult.bardResponse}
+                                                </p>
+                                            ) : (
+                                                <div
+                                                    className="inline-block h-10 w-10 float-center animate-spin rounded-full border-4 border-solid border-gray-500 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
+                                                    role="status"
+                                                ></div>
+                                            )}
+                                        </div>
+                                        <div className="mt-4 flex justify-between">
+                                            <button
+                                                onClick={handleBardRegenerate}
+                                                className={
+                                                    loading || !serverStatus || error
+                                                        ? "mr-3 bg-gray-500 text-white font-bold py-2 px-4 rounded"
+                                                        : "mr-3 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                                                }
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? "Loading..." : "Regenerate Response"}
+                                            </button>
+                                            <button
+                                                onClick={handleBardRegenerateTitle}
+                                                className={
+                                                    loading || !serverStatus || error
+                                                        ? "bg-gray-500 text-white font-bold py-2 px-4 rounded"
+                                                        : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                                                }
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? "Loading..." : "Regenerate Subject"}
+                                            </button>
+                                        </div>
+
+                                        {/* <div className="flex items-center mt-2">
+                                            <input
+                                                type="range"
+                                                className="flex-grow h-1.5 cursor-pointer appearance-none rounded-lg border-transparent bg-neutral-200"
+                                                min="1"
+                                                max="3"
+                                                id="customRange2"
+                                                value={bardScore}
+                                                onChange={handleSliderChangeB}
+                                            />
+                                            <button
+                                                className="bg-gray-500 text-white font-bold py-2 px-4 rounded ml-2"
+                                                disabled
+                                            >
+                                                {bardScore}
+                                            </button>
+                                            <button
+                                                onClick={() => handleRegenerate("text")}
+                                                className={loading || !serverStatus || error ? "bg-gray-500 text-white font-bold py-2 px-4 rounded ml-2" : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-2"}
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? 'Loading...' : 'Submit'}
+                                            </button>
+                                        </div> */}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="w-1/4 ml-4 flex flex-col">
+                            {/* Right-aligned section */}
+                            {aiResult && (
+                                <div className="p-4 bg-white shadow-md rounded-lg w-full h-128 overflow-auto">
+                                    <div className="mt-4">
+                                        <p>
+                                            <b>Meta</b>:
+                                        </p>
+                                        <div className="mt-2 p-2 border border-gray-300 rounded">
+                                            {aiResult.metaTitle && <h2>{aiResult.metaTitle}</h2>}
+                                            {aiResult.metaTitle && aiResult.metaResponse && (
+                                                <br></br>
+                                            )}
+                                            {aiResult.metaResponse ? (
+                                                <p className="whitespace-pre-wrap">
+                                                    {aiResult.metaResponse}
+                                                </p>
+                                            ) : (
+                                                <div
+                                                    className="inline-block h-10 w-10 float-center animate-spin rounded-full border-4 border-solid border-gray-500 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
+                                                    role="status"
+                                                ></div>
+                                            )}
+                                        </div>
+                                        <div className="mt-4 flex justify-between">
+                                            <button
+                                                onClick={handleMetaRegenerate}
+                                                className={
+                                                    loading || !serverStatus || error
+                                                        ? "mr-3 bg-gray-500 text-white font-bold py-2 px-4 rounded"
+                                                        : "mr-3 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                                                }
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? "Loading..." : "Regenerate Response"}
+                                            </button>
+                                            <button
+                                                onClick={handleMetaRegenerateTitle}
+                                                className={
+                                                    loading || !serverStatus || error
+                                                        ? "bg-gray-500 text-white font-bold py-2 px-4 rounded"
+                                                        : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                                                }
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? "Loading..." : "Regenerate Subject"}
+                                            </button>
+                                        </div>
+
+                                        {/* <div className="flex items-center mt-2">
+                                            <input
+                                                type="range"
+                                                className="flex-grow h-1.5 cursor-pointer appearance-none rounded-lg border-transparent bg-neutral-200"
+                                                min="1"
+                                                max="3"
+                                                id="customRange2"
+                                                value={metaScore}
+                                                onChange={handleSliderChangeM}
+                                            />
+                                            <button
+                                                className="bg-gray-500 text-white font-bold py-2 px-4 rounded ml-2"
+                                                disabled
+                                            >
+                                                {metaScore}
+                                            </button>
+                                            <button
+                                                onClick={() => handleRegenerate("text")}
+                                                className={loading || !serverStatus || error ? "bg-gray-500 text-white font-bold py-2 px-4 rounded ml-2" : "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-2"}
+                                                disabled={loading || !serverStatus || error}
+                                            >
+                                                {loading ? 'Loading...' : 'Submit'}
+                                            </button>
+                                        </div> */}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById("root"));
+    </script>
+</body>
+
+</html>
