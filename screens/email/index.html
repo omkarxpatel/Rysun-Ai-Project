@@ -316,6 +316,7 @@
                                 gptResponse: content,
                             }));
                         };
+                        
             
                         window.eventSourceBard = new EventSource(
                             `http://127.0.0.1:5000/api/stream-results/bard?sessionId=${encodeURIComponent(sessionId)}`
@@ -382,6 +383,7 @@
                     .then((response) => response.json())
                     .then((data) => {
                         if (data.status === "Success") {
+
                             setAiResult((prevState) => ({
                                 ...prevState,
                                 gptTitle: data.title,

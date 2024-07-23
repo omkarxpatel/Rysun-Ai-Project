@@ -145,6 +145,7 @@ def get_status():
     session_id = request.headers.get('sessionId')  # Ensure this matches the header sent from React
     print(f"Received session ID: {session_id}")  # Log the received session ID
     if not session_id or session_id not in global_sessions:
+        create_session(session_id)
         return jsonify({"status": "Error", "message": "Invalid or missing session ID"}), 403
 
     session = global_sessions[session_id]
@@ -315,7 +316,9 @@ def handle_bard_regen():
             return jsonify({"status": "Error", "message": "Invalid or missing session ID"}), 403
 
         session = global_sessions[session_id]
-        bard_thread = threading.Thread(target=process_bard, args=(session, session['last_data']["precon"], session['last_data']["prompt"], session['streaming_results']))
+        session['streaming_results']["bard"] = ""
+        
+        bard_thread = threading.Thread(target=process_bard, args=(session, session['last_data']["precon"], session['last_data']["prompt"]))
         bard_thread.start()
         
         return jsonify({"status": "Processing"}), 200
@@ -427,7 +430,7 @@ def handle_meta_regen():
         session = global_sessions[session_id]
         session['streaming_results']["meta"] = ""
 
-        meta_thread = threading.Thread(target=process_meta, args=(session, session['last_data']["precon"], session['last_data']["prompt"], session['streaming_results']))
+        meta_thread = threading.Thread(target=process_meta, args=(session, session['last_data']["precon"], session['last_data']["prompt"]))
         meta_thread.start()
         
         return jsonify({"status": "Processing"}), 200
@@ -610,10 +613,10 @@ def stream_results(model):
                 session['streaming_results'][model] = ""
 
             timeout_start = time.time()
-            while not session['streaming_results'][model] and time.time() - timeout_start < 60:
+            while not session['streaming_results'][model] and time.time() - timeout_start < 30:
                 time.sleep(1)
 
-            if time.time() - timeout_start >= 60:
+            if time.time() - timeout_start >= 30:
                 yield "data: {\"title\": \"None\", \"content\": \"Timeout waiting for results\"}\n\n"
                 return
 
@@ -622,6 +625,7 @@ def stream_results(model):
             data = {"title": title, "content": content}
             s = f"data: {json.dumps(data)}\n\n"
             yield s
+            return
         except Exception as e:
             print(f"Error in streaming results: {e}")
 
