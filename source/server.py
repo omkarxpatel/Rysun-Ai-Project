@@ -1,16 +1,20 @@
 from flask import Flask, jsonify, request, Response, send_from_directory
+from flask_cors import CORS, cross_origin
 import time, json, os, threading, sys
 import google.generativeai as genai
+from colorama import Fore, init
 from dotenv import load_dotenv
 from meta_ai_api import MetaAI
-from flask_cors import CORS
 from openai import OpenAI
 import uuid
 
 load_dotenv()
+global_sessions = {}
+init(autoreset=True)
+
 app = Flask(__name__)
-global_sessions = {} # storage for all sessions globally
-CORS(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 
 chatgpt_client = OpenAI(
@@ -32,43 +36,28 @@ from screens.email.email_constants import EMAIL_PROMPT_INFO, EMAIL_META_SPECIAL,
 ##########################################
 ###              SESSIONS              ###
 ##########################################
-# @app.before_request
-# def before_request():
-#     """
-#     This function is executed before each request.
-#     It checks if the necessary session variables are set, and if not, it initializes them.
-
-#     Parameters:
-#     None
-
-#     Returns:
-#     None
-#     """
-    
-#     if 'user_id' not in session:
-#         session['user_id'] = str(uuid.uuid4())
-    
-#     if 'data' not in session:
-#         session['data'] = {}
-    
-#     if 'additional' not in session:
-#         session['additional'] = EMAIL_DEFAULT_VALUES
-    
-#     if 'last_data' not in session:
-#         session['last_data'] = {}
-    
-#     if 'streaming_results' not in session:
-#         session['streaming_results'] = {}
 
 def create_session(uuid):
-    print(f"CREATED SESSION - {uuid}")
+    print(f"{Fore.GREEN}CREATED SESSION - {uuid}")
     global_sessions[uuid] = {
         'data': {},
-        'additional': {},
+        'additional': EMAIL_DEFAULT_VALUES,
         'last_data': {},
         'streaming_results': {}
     }
-    print(global_sessions[uuid])
+    print(f"{Fore.BLUE} Global Sessions: {len(global_sessions)}")
+    
+def delete_session(uuid):
+    if uuid in global_sessions:
+        del global_sessions[uuid]
+        print(f"{Fore.RED}DELETED SESSION - {uuid}")
+        print(f"{Fore.BLUE} Global Sessions: {len(global_sessions)}")
+        
+        # global_sessions = {k: v for k, v in global_sessions.items() if k != 'null'}
+
+        return True
+    else:
+        return False
 
 def get_session_info(uuid):
     session = global_sessions.get(uuid)
@@ -79,12 +68,14 @@ def get_session_info(uuid):
     return global_sessions[new_uuid]
 
 @app.route('/api/create_session', methods=['POST'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def create_session_endpoint():
     session_id = str(uuid.uuid4())
     create_session(session_id)
     return jsonify({'sessionId': session_id}), 200
 
 @app.route('/api/session_info', methods=['GET'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def session_info_endpoint():
     session_id = request.headers.get('sessionId')
     if session_id in global_sessions:
@@ -92,13 +83,22 @@ def session_info_endpoint():
     else:
         return jsonify({'error': 'Invalid session ID'}), 403
 
-
+@app.route('/api/delete_session', methods=['POST'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
+def delete_session_endpoint():
+    data = request.get_json()
+    session_id = data.get('sessionId')
+    if session_id and delete_session(session_id):
+        return jsonify({'message': 'Session deleted successfully'}), 200
+    else:
+        return jsonify({'error': 'Invalid session ID'}), 403
 
 ###########################################
 ###              ENDPOINTS              ###
 ###########################################
 
 @app.route('/email')
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def serve_email():
     """
     Serves the HTML file for the email generation screen.
@@ -114,6 +114,7 @@ def serve_email():
     return send_from_directory(directory, 'index.html')
 
 @app.route('/code')
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def serve_code():
     """
     Serves the HTML file for the code generation screen.
@@ -129,6 +130,7 @@ def serve_code():
     return send_from_directory(directory, 'index.html')
 
 @app.route('/api/status', methods=['GET'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def get_status():
     """
     This function is a route handler for the '/api/status' endpoint.
@@ -142,11 +144,12 @@ def get_status():
         - 'status': A string indicating the status of the server. In this case, it's 'ok'.
         - HTTP status code: 200 (OK)
     """
-    session_id = request.headers.get('sessionId')  # Ensure this matches the header sent from React
-    print(f"Received session ID: {session_id}")  # Log the received session ID
+    print("ping")
+    session_id = request.headers.get('sessionId')
     if not session_id or session_id not in global_sessions:
-        create_session(session_id)
-        return jsonify({"status": "Error", "message": "Invalid or missing session ID"}), 403
+        # session_id = str(uuid.uuid4())
+        # create_session(session_id)
+        return jsonify({"status": "Error", "message": "Invalid or missing session ID - navigate to the /email endpoint"}), 403
 
     session = global_sessions[session_id]
     session['data']['status'] = 'ok'
@@ -183,6 +186,7 @@ def process_gpt(session, preconditional, prompt):
 
 
 @app.route('/api/gpt-regen', methods=['POST'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def handle_gpt_regen():
     """
     Handles the GPT regeneration request.
@@ -212,6 +216,7 @@ def handle_gpt_regen():
         return jsonify({"status": "Error", "message": str(e)}), 500
 
 @app.route('/api/gpt-regen-title', methods=['POST'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def handle_gpt_regen_title():
     """
     Handles the GPT regeneration title request.
@@ -298,6 +303,7 @@ def process_bard(session, preconditional, prompt):
 
 
 @app.route('/api/bard-regen', methods=['POST'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def handle_bard_regen():
     """
     Handles the Bard regeneration request.
@@ -327,6 +333,7 @@ def handle_bard_regen():
 
 
 @app.route('/api/bard-regen-title', methods=['POST'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def handle_bard_regen_title():
     """
     Handles the Bard regeneration title request.
@@ -410,6 +417,7 @@ def process_meta(session, preconditional, prompt):
 
 
 @app.route('/api/meta-regen', methods=['POST'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def handle_meta_regen():
     """
     Handles the Meta regeneration request.
@@ -439,6 +447,7 @@ def handle_meta_regen():
 
 
 @app.route('/api/meta-regen-title', methods=['POST'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def handle_meta_regen_title():
     """
     Handles the Meta regeneration title request.
@@ -497,6 +506,7 @@ def regen_title_meta(session, resp):
 ######################################
 
 @app.route('/api/prompt-submission-code', methods=['POST'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def handle_prompt_submission_code():
     """
     Handles the prompt submission for code generation.
@@ -537,7 +547,9 @@ def handle_prompt_submission_code():
     return jsonify({"status": "Processing"}), 200
 
 @app.route('/api/prompt-submission-email', methods=['POST'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def handle_prompt_submission_email():
+
     """
     Handles the prompt submission.
 
@@ -554,7 +566,9 @@ def handle_prompt_submission_email():
     session = global_sessions[session_id]
     request_data = request.get_json()
     precon = request_data.get('role') + "\n\n"
-    prompt = request_data.get('prompt')
+    
+    prompt = "\n\nPrompt: "
+    prompt += request_data.get('prompt')
     
     if not prompt:
         return jsonify({"error": "Prompt is required"}), 400
@@ -565,7 +579,7 @@ def handle_prompt_submission_email():
     notes = request_data.get('notes')
     keywords = request_data.get('keywords')
     if session['additional']:
-        precon += f"-- Additional info: {session['additional']}"
+        precon += f"-- Additional info: {session['additional']}" ### CHECK
     if notes:
         precon += f"-- Notes: {notes}"
     if keywords:
@@ -590,6 +604,7 @@ def handle_prompt_submission_email():
 
 
 @app.route('/api/stream-results/<model>', methods=['GET'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def stream_results(model):
     """
     Streams the results of the prompt generation for a specific model.
@@ -613,10 +628,10 @@ def stream_results(model):
                 session['streaming_results'][model] = ""
 
             timeout_start = time.time()
-            while not session['streaming_results'][model] and time.time() - timeout_start < 30:
-                time.sleep(1)
+            while not session['streaming_results'][model] and time.time() - timeout_start < 15:
+                time.sleep(1) ### CHECK
 
-            if time.time() - timeout_start >= 30:
+            if time.time() - timeout_start >= 15:
                 yield "data: {\"title\": \"None\", \"content\": \"Timeout waiting for results\"}\n\n"
                 return
 
@@ -626,6 +641,7 @@ def stream_results(model):
             s = f"data: {json.dumps(data)}\n\n"
             yield s
             return
+        
         except Exception as e:
             print(f"Error in streaming results: {e}")
 
@@ -638,6 +654,7 @@ def stream_results(model):
 ###              OTHER              ###
 #######################################
 @app.route('/api/model-dropdown-selected', methods=['POST'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def handle_model_dropdown_selected():
     """
     Handles the model dropdown selection event.
@@ -664,6 +681,7 @@ def handle_model_dropdown_selected():
 
 
 @app.route('/api/role-dropdown-selected', methods=['POST'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def handle_role_dropdown_selected():
     """
     Handles the role dropdown selection event.
@@ -689,6 +707,7 @@ def handle_role_dropdown_selected():
 
 
 @app.route('/api/selection-choice', methods=['POST'])
+@cross_origin(origin='*', headers=['Content-Type', 'application/json'])
 def handle_selection_choice():
     """
     Handles the selection choice event.
@@ -713,8 +732,10 @@ def handle_selection_choice():
         first_val = str(session['additional'][i]).split()[0]
         if curr_val == first_val:
             session['additional'].pop(i)
+            break
         
     session['additional'].append(selected_option)
+    
     return jsonify(session['data'])
 
 
@@ -737,18 +758,17 @@ def run_app_with_retries():
     while True:
         try:
             with app.app_context():
-                app.run(debug=True)
+                app.run(host='0.0.0.0', port=5000, debug=True)
         except Exception as e:
             print(f"Server error: {e}. Restarting in {retry_interval} seconds...")
             time.sleep(retry_interval)
 
-def main(val):
-    # if val:
-    #     value = int(input("(1) One time server\n(2) Server with error handling\n> "))
-    #     if value == 1:
-            # app.run(debug=True)
-    # app.run(debug=False)
-    run_app_with_retries()
+
 
 if __name__ == '__main__':
-    main(True)
+    try:
+        print(f"{Fore.GREEN}\n\nServer Connected")
+        run_app_with_retries()
+        
+    finally:
+        print(f"{Fore.RED}\n\nServer Disconnected")

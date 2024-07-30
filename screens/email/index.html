@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Rysun Ai Project - Omkar Patel</title>
+    <title>Rysun Leadgeneration</title>
     <link rel="shortcut icon" href="https://intranet.rysun.com/assets/images/favicon.png" />
 
     <!-- tailwind -->
@@ -46,9 +46,11 @@
 
             const [count, setCount] = React.useState(0);
 
+            const API_BASE_URL = 'https://ron.rysun.in';
+
             React.useEffect(() => {
                 const checkServerStatus = () => {
-                    fetch("http://127.0.0.1:5000/api/status", {
+                    fetch("https://ronapi.rysun.in:5001/api/status", {
                         method: "GET",
                         headers: {
                             "Content-Type": "application/json",
@@ -58,6 +60,11 @@
                     .then((response) => {
                         if (response.ok) {
                             setServerStatus(true);
+
+                            //const data = response.json();
+                            //const newSessionId = data.sessionId;
+                            //sessionStorage.setItem("sessionId", newSessionId);
+                            //console.log(`Session ID created and stored: ${newSessionId}`);
                     
                             if (count === 0) {
                                 setCount(1);
@@ -94,7 +101,7 @@
                 const generateSessionId = async () => {
                     try {
                         const response = await fetch(
-                            "http://localhost:5000/api/create_session",
+                            "https://ronapi.rysun.in:5001/api/create_session",
                             {
                                 method: "POST",
                                 headers: {
@@ -111,6 +118,29 @@
                     }
                 };
 
+
+                const deleteSessionId =  () => {
+                    const sessionId = sessionStorage.getItem("sessionId");
+                    if (sessionId) {
+                        try {
+                            const response = fetch("https://ronapi.rysun.in:5001/api/delete_session", {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                },
+                                body: JSON.stringify({ sessionId }),  // Sending sessionId in the body
+                            });
+                            const result = response.json();
+                            console.log(result.message || result.error);
+                        } catch (error) {
+                            console.error("Error deleting session:", error);
+                        }
+                    }
+                };
+                
+    
+                window.addEventListener("beforeunload", deleteSessionId);
+
                 generateSessionId();
 
 
@@ -118,31 +148,10 @@
             }, []);
 
 
-            const fetchSessionInfo = async () => {
-                const sessionId = sessionStorage.getItem('sessionId');
-                if (sessionId) {
-                    try {
-                        const response = await fetch('http://localhost:5000/api/session_info', {
-                            method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'sessionId': sessionId,
-                            },
-                        });
-                        const data = await response.json();
-                        console.log('Session Info:', data);
-                    } catch (error) {
-                        console.error('Error fetching session info:', error);
-                    }
-                } else {
-                    console.error('No session ID found in session storage');
-                }
-            };
-
             const handleModelChange = (e) => {
                 const selectedValue = e.target.value;
 
-                fetch("http://127.0.0.1:5000/api/model-dropdown-selected", {
+                fetch("https://ronapi.rysun.in:5001/api/model-dropdown-selected", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -166,7 +175,7 @@
             const handleRoleChange = (e) => {
                 const selectedValue = e.target.value;
 
-                fetch("http://127.0.0.1:5000/api/role-dropdown-selected", {
+                fetch("https://ronapi.rysun.in:5001/api/role-dropdown-selected", {
                     method: "POST",
                     headers: {
                             "sessionId": sessionStorage.getItem('sessionId'),
@@ -191,7 +200,7 @@
                 setError(null);
                 setLastPrompt("");
 
-                fetch("http://127.0.0.1:5000/api/selection-choice", {
+                fetch("https://ronapi.rysun.in:5001/api/selection-choice", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -267,11 +276,11 @@
             
                     const sessionId = sessionStorage.getItem('sessionId'); // Retrieve session ID from storage
             
-                    fetch("http://127.0.0.1:5000/api/prompt-submission-email", {
+                    fetch("https://ronapi.rysun.in:5001/api/prompt-submission-email", {
                         method: "POST",
                         headers: {
                             "Content-Type": "application/json",
-                            "sessionId": sessionId, // Include the session ID in the headers
+                            "sessionId": sessionId, 
                         },
                         body: JSON.stringify({
                             prompt: promptValue,
@@ -302,7 +311,7 @@
             
                         // Initialize EventSource with sessionId in the request headers
                         window.eventSourceGpt = new EventSource(
-                            `http://127.0.0.1:5000/api/stream-results/gpt?sessionId=${encodeURIComponent(sessionId)}`
+                            `https://ronapi.rysun.in:5001/api/stream-results/gpt?sessionId=${encodeURIComponent(sessionId)}`
                         );
                         window.eventSourceGpt.onmessage = (e) => {
                             let temp = e.data;
@@ -315,11 +324,12 @@
                                 gptTitle: title,
                                 gptResponse: content,
                             }));
+                            window.eventSourceGpt.close();
                         };
                         
             
                         window.eventSourceBard = new EventSource(
-                            `http://127.0.0.1:5000/api/stream-results/bard?sessionId=${encodeURIComponent(sessionId)}`
+                            `https://ronapi.rysun.in:5001/api/stream-results/bard?sessionId=${encodeURIComponent(sessionId)}`
                         );
                         window.eventSourceBard.onmessage = (e) => {
                             let temp = e.data;
@@ -332,10 +342,11 @@
                                 bardTitle: title,
                                 bardResponse: content,
                             }));
+                            window.eventSourceBard.close();
                         };
             
                         window.eventSourceMeta = new EventSource(
-                            `http://127.0.0.1:5000/api/stream-results/meta?sessionId=${encodeURIComponent(sessionId)}`
+                            `https://ronapi.rysun.in:5001/api/stream-results/meta?sessionId=${encodeURIComponent(sessionId)}`
                         );
                         window.eventSourceMeta.onmessage = (e) => {
                             let temp = e.data;
@@ -348,7 +359,6 @@
                                 metaTitle: title,
                                 metaResponse: content,
                             }));
-                            // Close the meta EventSource as it is the slowest
                             window.eventSourceMeta.close();
                             setLoading(false);
                         };
@@ -372,7 +382,7 @@
                 setLoading(true);
                 setError(null);
 
-                fetch("http://127.0.0.1:5000/api/gpt-regen-title", {
+                fetch("https://ronapi.rysun.in:5001/api/gpt-regen-title", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -405,7 +415,7 @@
                 setLoading(true);
                 setError(null);
 
-                fetch("http://127.0.0.1:5000/api/bard-regen-title", {
+                fetch("https://ronapi.rysun.in:5001/api/bard-regen-title", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -440,7 +450,7 @@
                 setLoading(true);
                 setError(null);
 
-                fetch("http://127.0.0.1:5000/api/meta-regen-title", {
+                fetch("https://ronapi.rysun.in:5001/api/meta-regen-title", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -477,7 +487,7 @@
                 setError(null);
                 const sessionId = sessionStorage.getItem('sessionId')
 
-                fetch("http://127.0.0.1:5000/api/gpt-regen", {
+                fetch("https://ronapi.rysun.in:5001/api/gpt-regen", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -486,7 +496,7 @@
                 })
                     .then(() => {
                         let eventSourceGpt = new EventSource(
-                            `http://127.0.0.1:5000/api/stream-results/gpt?sessionId=${encodeURIComponent(sessionId)}`
+                            `https://ronapi.rysun.in:5001/api/stream-results/gpt?sessionId=${encodeURIComponent(sessionId)}`
                         );
                         eventSourceGpt.onmessage = (e) => {
                             let temp = e.data;
@@ -516,7 +526,7 @@
                 setError(null);
                 const sessionId = sessionStorage.getItem('sessionId')
 
-                fetch("http://127.0.0.1:5000/api/bard-regen", {
+                fetch("https://ronapi.rysun.in:5001/api/bard-regen", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -525,7 +535,7 @@
                 })
                     .then(() => {
                         let eventSourceBard = new EventSource(
-                            `http://127.0.0.1:5000/api/stream-results/bard?sessionId=${encodeURIComponent(sessionId)}`
+                            `https://ronapi.rysun.in:5001/api/stream-results/bard?sessionId=${encodeURIComponent(sessionId)}`
                         );
                         eventSourceBard.onmessage = (e) => {
                             let temp = e.data;
@@ -554,7 +564,7 @@
                 setError(null);
                 const sessionId = sessionStorage.getItem('sessionId')
 
-                fetch("http://127.0.0.1:5000/api/meta-regen", {
+                fetch("https://ronapi.rysun.in:5001/api/meta-regen", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -563,7 +573,7 @@
                 })
                     .then(() => {
                         let eventSourceMeta = new EventSource(
-                            `http://127.0.0.1:5000/api/stream-results/meta?sessionId=${encodeURIComponent(sessionId)}`
+                            `https://ronapi.rysun.in:5001/api/stream-results/meta?sessionId=${encodeURIComponent(sessionId)}`
                         );
                         eventSourceMeta.onmessage = (e) => {
                             let temp = e.data;
@@ -599,7 +609,7 @@
                         aiResult;
                 const prompt = `${promptValue} -- ${promptType}`;
 
-                fetch("http://127.0.0.1:5000/api/prompt-submission", {
+                fetch("https://ronapi.rysun.in:5001/api/prompt-submission", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -634,8 +644,9 @@
                 setSelectedOption(e.target.value);
                 setError(null);
                 setLastPrompt("");
+                console.log(e.target.value + "has been selected")
 
-                fetch("http://127.0.0.1:5000/api/selection-choice", {
+                fetch("https://ronapi.rysun.in:5001/api/selection-choice", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
