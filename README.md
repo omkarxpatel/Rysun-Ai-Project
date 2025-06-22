@@ -1,4 +1,4 @@
-![alt text](../../images/rysun_logo.png) 
+![alt text](images/rysun_logo.png) 
 ### Omkar Patel
 ##### Timeline: 6/17/2024 - 6/21/2024
 
